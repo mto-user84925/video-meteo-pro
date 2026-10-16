@@ -188,7 +188,11 @@ export default function StudioMeteoPage() {
 
       if (data.scenes && Array.isArray(data.scenes) && data.scenes.length >= 2) {
         setScenes(data.scenes);
-        setImportSuccessMessage(`🎉 Article importé : les ${data.scenes.length} scènes, cartes haute résolution et le script calibré sur ${targetDuration}s sont prêts !`);
+        const methodLabel = data.method_used === "supabase_direct"
+          ? "Réseau Interne Supabase"
+          : (data.method_used === "jina_reader" ? "Proxy IA Universel (Bypass Anti-Bot)" : "Scraping HD Direct");
+        const countInfo = data.mirrored_count ? ` (${data.mirrored_count} cartes météo stockées sur Supabase)` : "";
+        setImportSuccessMessage(`🎉 Article importé via ${methodLabel} : les ${data.scenes.length} scènes${countInfo} et le script calibré sur ${targetDuration}s sont prêts !`);
       } else {
         // Fallback avec recyclage circulaire des images disponibles
         const allImgs = [data.cover_image, ...(data.content_images || [])].filter(Boolean);
@@ -201,7 +205,7 @@ export default function StudioMeteoPage() {
           };
         });
         setScenes(updated);
-        setImportSuccessMessage("✅ Cartes extraites et mirorées avec succès depuis l'article !");
+        setImportSuccessMessage("✅ Cartes extraites et synchronisées avec succès sur Supabase Storage !");
       }
     } catch (e: any) {
       alert(e.message || "Erreur lors de l'import de l'article.");
@@ -476,7 +480,7 @@ export default function StudioMeteoPage() {
             <div className="relative flex-1">
               <input
                 type="url"
-                placeholder="https://meteobtp.fr/actualites/... ou https://monsieurmeteo.com/actualites/..."
+                placeholder="Collez n'importe quelle URL (meteobtp.fr, ouest-france, infoclimat, actu.fr, etc.)"
                 value={articleUrl}
                 onChange={e => setArticleUrl(e.target.value)}
                 className="w-full bg-slate-950/90 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 transition-all font-mono"
