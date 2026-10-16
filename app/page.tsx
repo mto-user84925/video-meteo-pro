@@ -227,7 +227,7 @@ export default function StudioMeteoPage() {
     if (!sessionId) setSessionId(sId);
 
     const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
-    const remotePath = `renders/${sId}/scene_${index + 1}_${safeName}`;
+    const remotePath = `renders/${sId}/scene_${index + 1}_${Date.now()}_${safeName}`;
     const uploadUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/blog-images/${remotePath}`;
 
     try {
@@ -260,7 +260,7 @@ export default function StudioMeteoPage() {
       return;
     }
 
-    const sId = sessionId || `session_${Date.now()}`;
+    const sId = `session_${Date.now()}`;
     setSessionId(sId);
     setRendering(true);
     setProgressPercent(8);
