@@ -53,25 +53,43 @@ def upload_supabase(local_file, remote_path, content_type="video/mp4"):
     url = f"{SUPABASE_URL}/storage/v1/object/blog-images/{remote_path}"
     with open(local_file, "rb") as f:
         data = f.read()
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={
-            "apikey": SUPABASE_KEY,
-            "Authorization": f"Bearer {SUPABASE_KEY}",
-            "Content-Type": content_type
-        },
-        method="POST"
-    )
+
+    # Tentative 1 : POST standard
     try:
-        with urllib.request.urlopen(req) as resp:
-            print(f"✅ Téléversé Supabase : {remote_path}")
-    except urllib.error.HTTPError as e:
-        # Si le fichier existe déjà, tenter PUT (upsert)
-        req.method = "PUT"
-        with urllib.request.urlopen(req) as resp:
-            print(f"✅ Mis à jour Supabase : {remote_path}")
-    
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": content_type
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            print(f"✅ Téléversé Supabase (POST) : {remote_path}")
+            return f"{SUPABASE_URL}/storage/v1/object/public/blog-images/{remote_path}"
+    except Exception as e:
+        print(f"⚠️ POST Supabase {remote_path} : {e}, tentative PUT...")
+
+    # Tentative 2 : PUT (upsert / remplacement)
+    try:
+        req_put = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": content_type
+            },
+            method="PUT"
+        )
+        with urllib.request.urlopen(req_put, timeout=60) as resp:
+            print(f"✅ Mis à jour Supabase (PUT) : {remote_path}")
+            return f"{SUPABASE_URL}/storage/v1/object/public/blog-images/{remote_path}"
+    except Exception as e2:
+        print(f"⚠️ PUT Supabase {remote_path} : {e2}")
+
     return f"{SUPABASE_URL}/storage/v1/object/public/blog-images/{remote_path}"
 
 def tts_charon(text, out_wav):
@@ -406,6 +424,7 @@ def render(job_file):
         json.dump(status_payload, f, indent=2)
 
     status_url = upload_supabase(status_file, f"renders/{session_id}/status.json", content_type="application/json")
+    upload_supabase(status_file, f"renders/{session_id}/status_done.json", content_type="application/json")
     print(f"🎉 Job {session_id} terminé avec succès ! URLs :\n- TikTok: {tk_url}\n- Paysage: {ls_url}\n- Status: {status_url}")
 
 if __name__ == "__main__":

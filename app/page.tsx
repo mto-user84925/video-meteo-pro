@@ -1,7 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
-import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon, Terminal } from "lucide-react";
+
+interface LogEntry {
+  id: string;
+  time: string;
+  text: string;
+  type: 'info' | 'voice' | 'video' | 'audio' | 'success';
+}
 
 interface Scene {
   scene_number: number;
@@ -120,6 +127,17 @@ export default function StudioMeteoPage() {
 
   const [resultTiktok, setResultTiktok] = useState<string | null>(null);
   const [resultLandscape, setResultLandscape] = useState<string | null>(null);
+
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   // IMPORT AUTOMATIQUE EN 1 CLIC DEPUIS N'IMPORTE QUEL LIEN WEB D'ARTICLE
   const handleImportArticle = async (urlToFetch?: string) => {
@@ -245,9 +263,32 @@ export default function StudioMeteoPage() {
     const sId = sessionId || `session_${Date.now()}`;
     setSessionId(sId);
     setRendering(true);
-    setProgressStep("Préparation des fichiers et envoi à la régie...");
+    setProgressPercent(8);
+    setElapsedSeconds(0);
+    setProgressStep("Lancement de la régie vidéo...");
     setResultTiktok(null);
     setResultLandscape(null);
+
+    const startTime = Date.now();
+    const getNowStr = () => new Date().toLocaleTimeString("fr-FR", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    setLogs([
+      { id: "init_1", time: getNowStr(), text: "🚀 Démarrage du job de rendu et envoi à la régie cloud...", type: "info" }
+    ]);
+
+    const plannedMilestones = [
+      { sec: 2, text: "📥 Téléchargement des 5 cartes & visuels haute résolution...", type: "info", pct: 15 },
+      { sec: 6, text: "🎙️ Scène 1 : Synthèse vocale Gemini 3.8 Flash TTS (Voix Charon - Accroche ≤ 4s)...", type: "voice", pct: 25 },
+      { sec: 11, text: "🎙️ Scène 2 : Génération voix off Charon (Analyse synoptique d'altitude)...", type: "voice", pct: 35 },
+      { sec: 16, text: "🎙️ Scène 3 : Génération voix off Charon (Chronologie du front & radar animée)...", type: "voice", pct: 45 },
+      { sec: 21, text: "🎙️ Scène 4 : Génération voix off Charon (Lames d'eau horaires & cumuls)...", type: "voice", pct: 55 },
+      { sec: 26, text: "🎙️ Scène 5 : Génération voix off Charon (Paroxysme & signature Météo-Climat Pro)...", type: "voice", pct: 65 },
+      { sec: 32, text: "🎵 Concaténation audio et normalisation Broadcast (-14.5 LUFS)...", type: "audio", pct: 75 },
+      { sec: 38, text: "📱 Encodage vidéo TikTok 9:16 (1080x1920) avec overlays et dynamic blur...", type: "video", pct: 85 },
+      { sec: 44, text: "🖥️ Encodage vidéo Paysage 16:9 (1920x1080) avec incrustation direct TV...", type: "video", pct: 92 },
+      { sec: 50, text: "🛡️ Freeze-frame padding (garantie anti-écran noir) & mixage musical (-26 dB)...", type: "audio", pct: 96 },
+      { sec: 56, text: "☁️ Téléversement haute vitesse sur Supabase Cloud Storage...", type: "info", pct: 98 },
+    ];
 
     try {
       const payload = {
@@ -277,34 +318,55 @@ export default function StudioMeteoPage() {
 
       if (!res.ok) throw new Error("Erreur de dispatch");
 
-      // Polling de statut
+      // 1. Timer régulier pour les logs et l'horloge
+      const addedMilestones = new Set<number>();
+      const timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setElapsedSeconds(elapsed);
+
+        plannedMilestones.forEach(m => {
+          if (elapsed >= m.sec && !addedMilestones.has(m.sec)) {
+            addedMilestones.add(m.sec);
+            setLogs(prev => [...prev, { id: `${m.sec}_${Date.now()}`, time: getNowStr(), text: m.text, type: m.type as any }]);
+            setProgressPercent(m.pct);
+            setProgressStep(m.text);
+          }
+        });
+      }, 1000);
+
+      // 2. Polling de statut toutes les 2.5 secondes
       let attempts = 0;
-      const interval = setInterval(async () => {
+      const statusInterval = setInterval(async () => {
         attempts++;
         try {
           const stRes = await fetch(`/api/status?session_id=${sId}`);
           if (stRes.ok) {
             const stData = await stRes.json();
             if (stData.status === "completed") {
-              clearInterval(interval);
+              clearInterval(timerInterval);
+              clearInterval(statusInterval);
+              setLogs(prev => [
+                ...prev,
+                { id: `done_${Date.now()}`, time: getNowStr(), text: "🎉 Rendu terminé avec succès ! Vos 2 vidéos (TikTok 9:16 & Paysage 16:9) sont prêtes.", type: "success" }
+              ]);
+              setProgressPercent(100);
               setResultTiktok(stData.tiktok_url);
               setResultLandscape(stData.landscape_url);
               setRendering(false);
               setProgressStep("Rendu terminé avec succès !");
-            } else if (stData.step) {
-              setProgressStep(stData.step);
             }
           }
         } catch (err) {
           console.error(err);
         }
 
-        if (attempts > 80) {
-          clearInterval(interval);
+        if (attempts > 90) {
+          clearInterval(timerInterval);
+          clearInterval(statusInterval);
           setRendering(false);
           alert("Le rendu a pris plus de temps que prévu. Veuillez vérifier la console.");
         }
-      }, 3000);
+      }, 2500);
 
     } catch (e: any) {
       alert(e.message || "Erreur de démarrage du rendu.");
@@ -603,10 +665,84 @@ export default function StudioMeteoPage() {
             {rendering ? "Régie vidéo en cours d'encodage..." : "🎬 Générer les 2 Vidéos (TikTok 9:16 + Paysage 16:9)"}
           </button>
 
-          {rendering && (
-            <div className="mt-4 p-4 bg-slate-900 border border-sky-500/30 rounded-xl max-w-lg mx-auto flex items-center gap-3">
-              <RefreshCw className="w-5 h-5 text-sky-400 animate-spin flex-shrink-0" />
-              <span className="text-sm font-semibold text-sky-300">{progressStep}</span>
+          {/* JOURNAL DE LOGS EN DIRECT (CONSOLE RÉGIE BROADCAST) */}
+          {(rendering || logs.length > 0) && (
+            <div className="mt-6 bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-2xl space-y-4 max-w-3xl mx-auto text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-sky-500/10 border border-sky-500/30 rounded-xl text-sky-400">
+                    <Terminal className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Journal d'Exécution Régie en Direct</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400">Suivi seconde par seconde de la synthèse vocale Charon et des encodages FFmpeg.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs font-mono text-slate-300 font-bold bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+                    ⏱️ {Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:{(elapsedSeconds % 60).toString().padStart(2, '0')}
+                  </span>
+                  {rendering ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 rounded-full">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                      Encodage en cours
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 rounded-full">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      Rendu terminé
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* BARRE DE PROGRESSION */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px] font-mono font-semibold text-slate-400">
+                  <span>Progression régie</span>
+                  <span className={progressPercent === 100 ? "text-emerald-400 font-bold" : "text-sky-400"}>{progressPercent}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800 p-0.5">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      progressPercent === 100
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                        : 'bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500 animate-pulse'
+                    }`}
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* FENÊTRE TERMINAL SCROLLABLE */}
+              <div
+                ref={logsContainerRef}
+                className="bg-slate-950/90 rounded-xl border border-slate-800/80 p-3.5 max-h-56 overflow-y-auto font-mono text-xs space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700"
+              >
+                {logs.map((log) => (
+                  <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+                    <span className="text-slate-500 flex-shrink-0 select-none">[{log.time}]</span>
+                    <span className={
+                      log.type === 'success' ? 'text-emerald-400 font-bold' :
+                      log.type === 'voice' ? 'text-amber-300' :
+                      log.type === 'video' ? 'text-sky-300' :
+                      log.type === 'audio' ? 'text-indigo-300' :
+                      'text-slate-300'
+                    }>
+                      {log.text}
+                    </span>
+                  </div>
+                ))}
+                {rendering && (
+                  <div className="flex items-center gap-2 text-slate-500 animate-pulse pt-1">
+                    <span className="inline-block w-2 h-3.5 bg-sky-400" />
+                    <span className="text-[11px] text-slate-400">Traitement en cours dans le cloud...</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </section>

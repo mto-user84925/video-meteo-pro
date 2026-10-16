@@ -41,17 +41,7 @@ export async function POST(req: Request) {
     const jobJson = JSON.stringify(job, null, 2);
     await uploadToSupabase(`renders/${session_id}/job.json`, jobJson, "application/json");
 
-    // 2. Initialisation du status.json
-    const statusPayload = JSON.stringify({
-      status: "processing",
-      session_id,
-      step: "Lancement de la régie vidéo...",
-      progress: 10,
-      created_at: Math.floor(Date.now() / 1000)
-    }, null, 2);
-    await uploadToSupabase(`renders/${session_id}/status.json`, statusPayload, "application/json");
-
-    // 3. Déclenchement de GitHub Actions workflow_dispatch
+    // 2. Déclenchement de GitHub Actions workflow_dispatch
     if (GITHUB_PAT) {
       const ghRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/render.yml/dispatches`, {
         method: "POST",
