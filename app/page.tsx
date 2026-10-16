@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Sparkles, Video, Download, Upload, CheckCircle2, Clock, AlertTriangle, ShieldCheck, RefreshCw, Play } from "lucide-react";
+import React, { useState } from "react";
+import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon } from "lucide-react";
 
 interface Scene {
   scene_number: number;
@@ -80,6 +80,10 @@ const PHENOMENONS = [
 ];
 
 export default function StudioMeteoPage() {
+  const [articleUrl, setArticleUrl] = useState("");
+  const [importingArticle, setImportingArticle] = useState(false);
+  const [importSuccessMessage, setImportSuccessMessage] = useState("");
+
   const [phenomenon, setPhenomenon] = useState(PHENOMENONS[0]);
   const [topic, setTopic] = useState("Arrivée d'un épisode méditerranéen majeur dans le Sud-Est");
   const [notes, setNotes] = useState("Pic d'intensité mardi et mercredi, pointes > 160 mm sur Cévennes, Gard, Hérault, Rhône.");
@@ -93,7 +97,52 @@ export default function StudioMeteoPage() {
   const [resultTiktok, setResultTiktok] = useState<string | null>(null);
   const [resultLandscape, setResultLandscape] = useState<string | null>(null);
 
-  // Fonction pour appeler le LLM et générer le script 5 scènes
+  // IMPORT AUTOMATIQUE EN 1 CLIC DEPUIS N'IMPORTE QUEL LIEN WEB D'ARTICLE
+  const handleImportArticle = async (urlToFetch?: string) => {
+    const targetUrl = urlToFetch || articleUrl;
+    if (!targetUrl.trim()) {
+      alert("Veuillez coller le lien de l'article météo.");
+      return;
+    }
+
+    setImportingArticle(true);
+    setImportSuccessMessage("");
+    try {
+      const res = await fetch("/api/import-article", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: targetUrl.trim() })
+      });
+
+      if (!res.ok) {
+        throw new Error("Impossible d'extraire les données depuis cette URL.");
+      }
+
+      const data = await res.json();
+      if (data.title) setTopic(data.title);
+
+      if (data.scenes && Array.isArray(data.scenes) && data.scenes.length === 5) {
+        setScenes(data.scenes);
+        setImportSuccessMessage("🎉 Article importé avec succès : les 5 cartes et le script complet ont été automatiquement injectés !");
+      } else {
+        // Fallback si scènes partielles : on injecte les images
+        const allImgs = [data.cover_image, ...(data.content_images || [])].filter(Boolean);
+        const updated = scenes.map((sc, i) => ({
+          ...sc,
+          file_url: allImgs[i] || sc.file_url || "",
+          file_name: allImgs[i] ? `Carte_${i + 1}` : sc.file_name || ""
+        }));
+        setScenes(updated);
+        setImportSuccessMessage("✅ Cartes extraites avec succès depuis l'article !");
+      }
+    } catch (e: any) {
+      alert(e.message || "Erreur lors de l'import de l'article.");
+    } finally {
+      setImportingArticle(false);
+    }
+  };
+
+  // Génération du script par IA seule (sans lien)
   const handleGenerateScript = async () => {
     setGeneratingScript(true);
     try {
@@ -104,7 +153,6 @@ export default function StudioMeteoPage() {
       });
       const data = await res.json();
       if (data.scenes && Array.isArray(data.scenes)) {
-        // Conserver les fichiers déjà uploadés
         const merged = data.scenes.map((newSc: any, i: number) => ({
           ...newSc,
           file_url: scenes[i]?.file_url || "",
@@ -120,7 +168,7 @@ export default function StudioMeteoPage() {
     }
   };
 
-  // Upload d'une image vers Supabase Storage
+  // Upload manuel d'une image vers Supabase Storage
   const handleFileUpload = async (index: number, file: File) => {
     const sId = sessionId || `session_${Date.now()}`;
     if (!sessionId) setSessionId(sId);
@@ -130,7 +178,7 @@ export default function StudioMeteoPage() {
     const uploadUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/blog-images/${remotePath}`;
 
     try {
-      const res = await fetch(uploadUrl, {
+      await fetch(uploadUrl, {
         method: "POST",
         headers: {
           "apikey": "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
@@ -155,7 +203,7 @@ export default function StudioMeteoPage() {
   const handleStartRender = async () => {
     const missing = scenes.find(s => !s.file_url);
     if (missing) {
-      alert(`Veuillez ajouter une image ou carte pour la Scène ${missing.scene_number}.`);
+      alert(`Veuillez vérifier que chaque scène possède une carte (manquante en Scène ${missing.scene_number}).`);
       return;
     }
 
@@ -216,7 +264,7 @@ export default function StudioMeteoPage() {
           console.error(err);
         }
 
-        if (attempts > 80) { // 4 minutes timeout
+        if (attempts > 80) {
           clearInterval(interval);
           setRendering(false);
           alert("Le rendu a pris plus de temps que prévu. Veuillez vérifier la console.");
@@ -245,84 +293,132 @@ export default function StudioMeteoPage() {
               </span>
             </div>
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white flex items-center gap-3">
-              <Video className="w-8 h-8 text-sky-400" /> Studio Vidéo Double Format
+              <Video className="w-8 h-8 text-sky-400" /> Studio Vidéo Automatique Double Format
             </h1>
             <p className="text-slate-400 text-sm md:text-base mt-1">
-              Générez en 1 clic vos bulletins météo broadcast : <strong>📱 TikTok (9:16)</strong> et <strong>🖥️ Paysage YouTube (16:9)</strong> avec voix off Charon.
+              Collez simplement le lien d'un article météo : les <strong>cartes</strong>, le <strong>script</strong> et les <strong>vidéos TikTok & Paysage</strong> sont générés automatiquement.
             </p>
           </div>
         </header>
 
-        {/* ÉTAPE 1 : SUJET & CONFIGURATION RAPIDE */}
-        <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center text-xs font-black">1</span>
-              Actualité Météo & Génération du Script
-            </h2>
+        {/* 🌟 ACTION PRINCIPALE : IMPORTATION EN 1 CLIC DEPUIS UN LIEN D'ARTICLE WEB */}
+        <section className="bg-gradient-to-r from-blue-950/70 via-slate-900 to-indigo-950/70 border-2 border-sky-500/40 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-3">
+            <div>
+              <span className="px-2.5 py-0.5 rounded text-[11px] font-black uppercase tracking-wider bg-sky-500 text-slate-950 mb-1.5 inline-block">
+                Mode Rapide 1 Clic
+              </span>
+              <h2 className="text-xl font-black text-white flex items-center gap-2">
+                <LinkIcon className="w-5 h-5 text-sky-400" /> Coller le lien d'un article météo
+              </h2>
+              <p className="text-slate-400 text-xs md:text-sm mt-0.5">
+                Le système extrait automatiquement la photo de couverture, les cartes météo, les cumuls chiffrés et rédige les 5 scènes avec l'IA.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <input
+                type="url"
+                placeholder="https://meteobtp.fr/actualites/... ou https://monsieurmeteo.com/actualites/..."
+                value={articleUrl}
+                onChange={e => setArticleUrl(e.target.value)}
+                className="w-full bg-slate-950/90 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 transition-all font-mono"
+              />
+            </div>
             <button
-              onClick={handleGenerateScript}
-              disabled={generatingScript}
-              className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 text-sm cursor-pointer"
+              onClick={() => handleImportArticle()}
+              disabled={importingArticle}
+              className="px-6 py-3 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-xl shadow-lg shadow-sky-500/20 transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer flex-shrink-0"
             >
-              {generatingScript ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              ✨ Rédiger le script avec l'IA
+              {importingArticle ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {importingArticle ? "Extraction en cours..." : "⚡ Importer tout en 1 clic"}
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* EXEMPLE PRÊT À TESTER */}
+          <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
+            <span className="font-semibold text-slate-500">Exemple direct :</span>
+            <button
+              onClick={() => {
+                const exUrl = "https://meteobtp.fr/actualites/episode-mediterraneen-sud-est-fortes-pluies-cevennes-provence-1792152126";
+                setArticleUrl(exUrl);
+                handleImportArticle(exUrl);
+              }}
+              className="text-sky-400 hover:text-sky-300 underline flex items-center gap-1 cursor-pointer truncate max-w-md"
+            >
+              Épisode méditerranéen Sud-Est (Cévennes, Provence) <ExternalLink className="w-3 h-3 flex-shrink-0" />
+            </button>
+          </div>
+
+          {importSuccessMessage && (
+            <div className="mt-4 p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs md:text-sm font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              {importSuccessMessage}
+            </div>
+          )}
+        </section>
+
+        {/* ÉTAPE 1 (OPTIONNELLE) : PARAMÈTRES DU SUJET */}
+        <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+              <span>📝 Titre & Phénomène de l'actualité</span>
+            </h3>
+            <button
+              onClick={handleGenerateScript}
+              disabled={generatingScript}
+              className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer font-bold"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${generatingScript ? 'animate-spin' : ''}`} />
+              Régénérer le texte avec l'IA
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Type de phénomène</label>
+              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Type de phénomène</label>
               <select
                 value={phenomenon}
                 onChange={e => setPhenomenon(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
               >
                 {PHENOMENONS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Titre de l'alerte</label>
+              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Titre de l'alerte</label>
               <input
                 type="text"
                 value={topic}
                 onChange={e => setTopic(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
-              />
-            </div>
-            <div className="md:col-span-3">
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Notes, chiffres remarquables et communes cibles</label>
-              <input
-                type="text"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-semibold"
               />
             </div>
           </div>
         </section>
 
-        {/* ÉTAPE 2 : DÉCOUPAGE EN 5 SCÈNES */}
+        {/* ÉTAPE 2 : LES 5 SCÈNES DU BULLETIN (AVEC VIGNETTES DES CARTES EXTRACTES) */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center text-xs font-black">2</span>
-              Les 5 Scènes du Bulletin (Visuels & Voix Off)
+              <span>🖼️ Les 5 Scènes du Bulletin (Cartes & Voix Off Charon)</span>
             </h2>
-            <span className="text-xs text-slate-400">Glissez ou sélectionnez chaque carte météo</span>
+            <span className="text-xs text-slate-400">Cliquez sur une vignette pour changer une image si besoin</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {scenes.map((sc, i) => (
-              <div key={i} className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between space-y-3 relative group hover:border-slate-700 transition-all">
+              <div key={i} className="bg-slate-900/70 border border-slate-800 rounded-2xl p-3 flex flex-col justify-between space-y-3 relative group hover:border-slate-700 transition-all shadow-md">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-400">Scène {i + 1}</span>
-                    {i === 0 && <span className="text-[10px] bg-red-500/20 text-red-400 font-bold px-1.5 py-0.5 rounded">≤ 4s</span>}
+                    <span className="text-xs font-bold text-slate-300">Scène {i + 1}</span>
+                    {i === 0 && <span className="text-[10px] bg-red-500/20 text-red-400 font-bold px-1.5 py-0.5 rounded">Accroche ≤ 4s</span>}
                   </div>
 
-                  {/* DROPZONE IMAGE */}
-                  <label className={`w-full aspect-[4/3] rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center p-2 cursor-pointer transition-all ${sc.file_url ? 'border-emerald-500/40 bg-emerald-950/20' : 'border-slate-800 hover:border-sky-500 bg-slate-950'}`}>
+                  {/* APERÇU VIGNETTE DE LA CARTE EXTRAITE */}
+                  <label className={`w-full aspect-[4/3] rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center overflow-hidden cursor-pointer transition-all relative ${sc.file_url ? 'border-emerald-500/40 bg-slate-950' : 'border-slate-800 hover:border-sky-500 bg-slate-950'}`}>
                     <input
                       type="file"
                       accept="image/*,.gif"
@@ -330,22 +426,22 @@ export default function StudioMeteoPage() {
                       onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
                     />
                     {sc.file_url ? (
-                      <div className="space-y-1">
-                        <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
-                        <span className="text-[11px] text-emerald-300 font-semibold truncate block max-w-[120px]">
-                          {sc.file_name || "Carte importée"}
-                        </span>
+                      <div className="w-full h-full relative group">
+                        <img src={sc.file_url} alt={`Scène ${i+1}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all text-xs text-white font-bold gap-1">
+                          <Upload className="w-4 h-4" /> Changer
+                        </div>
                       </div>
                     ) : (
-                      <div className="space-y-1 text-slate-500">
-                        <Upload className="w-5 h-5 mx-auto" />
-                        <span className="text-[11px] block">Déposer visuel {i === 0 ? "(Photo)" : "(Carte/GIF)"}</span>
+                      <div className="space-y-1 text-slate-500 p-2">
+                        <ImageIcon className="w-5 h-5 mx-auto" />
+                        <span className="text-[11px] block">{i === 0 ? "Photo Déluge" : "Carte Météo"}</span>
                       </div>
                     )}
                   </label>
 
-                  {/* BADGE & TITRE */}
-                  <div className="mt-3 space-y-1">
+                  {/* TITRE & SOUS-TITRE */}
+                  <div className="mt-2.5 space-y-1">
                     <input
                       type="text"
                       value={sc.badge}
@@ -354,7 +450,7 @@ export default function StudioMeteoPage() {
                         copy[i].badge = e.target.value;
                         setScenes(copy);
                       }}
-                      className="w-full bg-slate-950/60 border border-slate-800 rounded px-2 py-1 text-[11px] text-amber-400 font-bold uppercase tracking-wider"
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-amber-400 font-bold uppercase tracking-wider"
                     />
                     <input
                       type="text"
@@ -364,14 +460,14 @@ export default function StudioMeteoPage() {
                         copy[i].title = e.target.value;
                         setScenes(copy);
                       }}
-                      className="w-full bg-slate-950/60 border border-slate-800 rounded px-2 py-1 text-xs text-white font-bold"
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white font-bold"
                     />
                   </div>
                 </div>
 
-                {/* SCRIPT VOIX OFF */}
+                {/* TEXTE VOIX OFF */}
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Voix off Charon</label>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Voix Off Charon</label>
                   <textarea
                     rows={4}
                     value={sc.script_text}
@@ -380,7 +476,7 @@ export default function StudioMeteoPage() {
                       copy[i].script_text = e.target.value;
                       setScenes(copy);
                     }}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 resize-none focus:outline-none focus:border-sky-500 leading-relaxed"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 resize-none focus:outline-none focus:border-sky-500 leading-relaxed font-sans"
                   />
                 </div>
               </div>
@@ -388,7 +484,7 @@ export default function StudioMeteoPage() {
           </div>
         </section>
 
-        {/* ÉTAPE 3 : BOUTON DE LANCEMENT & PROGRESSION */}
+        {/* ÉTAPE 3 : BOUTON DE LANCEMENT */}
         <section className="text-center py-4">
           <button
             onClick={handleStartRender}
@@ -396,7 +492,7 @@ export default function StudioMeteoPage() {
             className="w-full md:w-auto px-8 py-4 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-black text-lg rounded-2xl shadow-2xl shadow-sky-500/25 transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-3 mx-auto"
           >
             {rendering ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Play className="w-6 h-6 fill-current" />}
-            {rendering ? "Régie en cours de génération..." : "🎬 Générer les 2 Vidéos (TikTok 9:16 + Paysage 16:9)"}
+            {rendering ? "Régie vidéo en cours d'encodage..." : "🎬 Générer les 2 Vidéos (TikTok 9:16 + Paysage 16:9)"}
           </button>
 
           {rendering && (
