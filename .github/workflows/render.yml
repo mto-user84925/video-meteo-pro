@@ -1,0 +1,43 @@
+name: Render Video Meteo Pro
+
+on:
+  workflow_dispatch:
+    inputs:
+      session_id:
+        description: 'Session ID du rendu'
+        required: true
+        type: string
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install System Dependencies (FFmpeg & Fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-liberation
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install Pillow
+
+      - name: Download job.json from Supabase
+        run: |
+          curl -f -sSL "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/renders/${{ github.event.inputs.session_id }}/job.json" -o job.json
+
+      - name: Run Video Render Engine
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python scripts/render_engine.py --job job.json
