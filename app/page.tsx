@@ -188,6 +188,8 @@ export default function StudioMeteoPage() {
 
       if (data.scenes && Array.isArray(data.scenes) && data.scenes.length >= 2) {
         setScenes(data.scenes);
+        setResultTiktok(null);
+        setResultLandscape(null);
         const methodLabel = data.method_used === "supabase_direct"
           ? "Réseau Interne Supabase"
           : (data.method_used === "jina_reader" ? "Proxy IA Universel (Bypass Anti-Bot)" : "Scraping HD Direct");
@@ -318,7 +320,7 @@ export default function StudioMeteoPage() {
       return;
     }
 
-    const unmirrored = scenes.filter(s => !s.file_url.includes("supabase.co/storage")).map(s => s.scene_number);
+    const unmirrored = scenes.filter(s => !(s.file_url || "").includes("supabase.co/storage")).map(s => s.scene_number);
     if (unmirrored.length > 0 && !confirm(`Les images des scènes ${unmirrored.join(", ")} viennent d'un site protégé : le serveur de rendu ne pourra pas les télécharger et utilisera une carte de secours à la place.\n\nAstuce : enregistrez l'image depuis votre navigateur et importez-la dans la scène (bouton d'envoi de fichier).\n\nLancer quand même le rendu ?`)) {
       return;
     }
