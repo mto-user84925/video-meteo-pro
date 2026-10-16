@@ -766,10 +766,8 @@ export default function StudioMeteoPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-sky-400">📱 Format Vertical (TikTok / Shorts 9:16)</span>
                     <a
-                      href={resultTiktok}
-                      download
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={`${resultTiktok}${resultTiktok.includes('?') ? '&' : '?'}download=BULLETIN_TIKTOK_METEO.mp4`}
+                      download="BULLETIN_TIKTOK_METEO.mp4"
                       className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all"
                     >
                       <Download className="w-3.5 h-3.5" /> Télécharger MP4
@@ -787,10 +785,8 @@ export default function StudioMeteoPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-amber-400">🖥️ Format Paysage (YouTube / TV 16:9)</span>
                     <a
-                      href={resultLandscape}
-                      download
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={`${resultLandscape}${resultLandscape.includes('?') ? '&' : '?'}download=BULLETIN_PAYSAGE_METEO.mp4`}
+                      download="BULLETIN_PAYSAGE_METEO.mp4"
                       className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all"
                     >
                       <Download className="w-3.5 h-3.5" /> Télécharger MP4
