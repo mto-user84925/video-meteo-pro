@@ -204,14 +204,24 @@ def render(job_file):
     scenes = []
     t_cursor = 0.0
 
-    font_badge_tk = get_font("arialbd", 30)
-    font_title_tk = get_font("arialbd", 44)
-    font_sub_tk = get_font("arialbd", 28)
-
-    font_ls_tag = get_font("arialbd", 22)
-    font_ls_loc = get_font("arialbd", 36)
-    font_ls_title = get_font("arialbd", 34)
-    font_ls_ticker = get_font("segoeuib", 24)
+    def fit_text(text, font_pref, max_size, max_w, min_size=14):
+        text = (text or "").strip()
+        for sz in range(max_size, min_size - 1, -2):
+            f = get_font(font_pref, sz)
+            bb = f.getbbox(text)
+            w, h = bb[2] - bb[0], bb[3] - bb[1]
+            if w <= max_w:
+                return text, f, w, h
+        f = get_font(font_pref, min_size)
+        t = text
+        while len(t) > 4:
+            t = t[:-1].rstrip()
+            cand = t + "…"
+            bb = f.getbbox(cand)
+            if (bb[2] - bb[0]) <= max_w:
+                return cand, f, bb[2] - bb[0], bb[3] - bb[1]
+        bb = f.getbbox(t)
+        return t, f, bb[2] - bb[0], bb[3] - bb[1]
 
     # Voix off : UNE SEULE piste continue (intonation fluide), puis durée de chaque scène au prorata du texte
     progress(session_id, 10, "🎙️ Synthèse vocale Charon (piste unique)...", "voice")
@@ -248,52 +258,78 @@ def render(job_file):
         dur = scene_durs[idx]
         progress(session_id, 20 + int(25 * (idx + 1) / len(scenes_data)), f"🖼️ Scène {idx+1}/{len(scenes_data)} préparée ({dur:.1f}s)", "info")
 
-        # Création des overlays graphiques
+        # Création des overlays graphiques unifiés (Charte Broadcast Météo-Climat Pro)
         badge_color = tuple(sc_in.get("badge_color", [220, 30, 30]))
+        b_text = (sc_in.get("badge") or "ALERTE MÉTÉO").upper()
+        loc_text = (sc_in.get("location_tag") or "FRANCE").upper()
+        t_text = sc_in.get("title") or ""
+        s_text = sc_in.get("sub") or ""
+        ticker_raw = sc_in.get("ticker") or ""
 
-        # TikTok Overlay (1080x1920)
+        # 1) TikTok Overlay (1080x1920) — Cartouche haut + bandeau infos bas assorti au Paysage
         tk_img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
         d_tk = ImageDraw.Draw(tk_img)
-        box_x1, box_y1, box_x2, box_y2 = 50, 90, 1030, 305
-        d_tk.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=24, fill=(8, 14, 28, 225), outline=(255, 215, 60, 200), width=3)
-        
-        b_text = sc_in.get("badge", "ALERTE MÉTÉO")
-        b_bbox = font_badge_tk.getbbox(b_text)
-        b_w = (b_bbox[2] - b_bbox[0]) + 54
-        b_h = (b_bbox[3] - b_bbox[1]) + 18
+        box_x1, box_y1, box_x2, box_y2 = 40, 85, 1040, 310
+        d_tk.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=24, fill=(8, 14, 28, 235), outline=(255, 215, 60, 215), width=3)
+
+        pill_label = f"{b_text} • {loc_text}"
+        pill_txt, f_pill, pw, ph = fit_text(pill_label, "arialbd", 26, 860, 16)
+        b_w = pw + 56
+        b_h = max(38, ph + 18)
         b_x1 = (1080 - b_w) // 2
-        b_y1 = box_y1 + 22
+        b_y1 = box_y1 + 20
         d_tk.rounded_rectangle([b_x1, b_y1, b_x1 + b_w, b_y1 + b_h], radius=12, fill=badge_color)
         d_tk.ellipse([b_x1 + 14, b_y1 + (b_h - 12)//2, b_x1 + 26, b_y1 + (b_h - 12)//2 + 12], fill=(255, 255, 255))
-        d_tk.text((b_x1 + 34, b_y1 + 8), b_text, fill=(255, 255, 255), font=font_badge_tk)
-        
-        t_text = sc_in.get("title", "")
-        t_bbox = font_title_tk.getbbox(t_text)
-        d_tk.text(((1080 - (t_bbox[2] - t_bbox[0])) // 2, box_y1 + 85), t_text, fill=(255, 255, 255), font=font_title_tk)
-        
-        s_text = sc_in.get("sub", "")
-        s_bbox = font_sub_tk.getbbox(s_text)
-        d_tk.text(((1080 - (s_bbox[2] - s_bbox[0])) // 2, box_y1 + 150), s_text, fill=(255, 215, 60), font=font_sub_tk)
-        
+        d_tk.text((b_x1 + 36, b_y1 + (b_h - ph)//2 - 2), pill_txt, fill=(255, 255, 255), font=f_pill)
+
+        t_draw, f_title_tk, tw, th = fit_text(t_text, "arialbd", 42, 940, 20)
+        d_tk.text(((1080 - tw) // 2, box_y1 + 86), t_draw, fill=(255, 255, 255), font=f_title_tk)
+
+        s_draw, f_sub_tk, sw, sh = fit_text(s_text, "arialbd", 27, 940, 16)
+        d_tk.text(((1080 - sw) // 2, box_y1 + 152), s_draw, fill=(255, 215, 60), font=f_sub_tk)
+
+        if ticker_raw:
+            d_tk.rounded_rectangle([40, 1638, 1040, 1702], radius=16, fill=(8, 14, 28, 232), outline=(255, 215, 60, 190), width=2)
+            tk_tick_str, f_tk_tick, tkw, tkh = fit_text(f"INFOS MÉTÉO • {ticker_raw}", "segoeuib", 22, 950, 14)
+            d_tk.text(((1080 - tkw) // 2, 1638 + (64 - tkh) // 2 - 2), tk_tick_str, fill=(255, 215, 60), font=f_tk_tick)
+
         overlay_tk = os.path.join(work_dir, f"overlay_tk_{sc_id}.png")
         tk_img.save(overlay_tk)
 
-        # Paysage Overlay (1920x1080)
+        # 2) Paysage Overlay (1920x1080) — Même style cartouche arrondi marine & or, zéro débordement
         ls_img = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
         d_ls = ImageDraw.Draw(ls_img)
-        d_ls.rectangle([0, 930, 340, 1080], fill=badge_color)
-        d_ls.ellipse([30, 952, 44, 966], fill=(255, 255, 255))
-        d_ls.text((54, 948), "EN DIRECT", fill=(255, 255, 255), font=font_ls_tag)
-        d_ls.text((30, 980), sc_in.get("location_tag", "SUD-EST"), fill=(255, 255, 255), font=font_ls_loc)
-        d_ls.text((30, 1032), b_text, fill=(255, 220, 220), font=font_ls_tag)
-        
-        d_ls.rectangle([340, 930, 1920, 1005], fill=(8, 16, 30, 235))
-        d_ls.text((370, 948), f"{t_text} — {s_text}", fill=(255, 255, 255), font=font_ls_title)
-        
-        d_ls.rectangle([340, 1005, 1920, 1080], fill=(16, 26, 46, 245))
-        d_ls.line([340, 1005, 1920, 1005], fill=(255, 215, 60, 180), width=2)
-        d_ls.text((370, 1024), f"INFOS MÉTÉO • {sc_in.get('ticker', '')}", fill=(255, 215, 60), font=font_ls_ticker)
-        
+
+        # Grand cartouche inférieur arrondi
+        d_ls.rounded_rectangle([36, 922, 1884, 1068], radius=22, fill=(8, 14, 28, 238), outline=(255, 215, 60, 215), width=3)
+
+        # Cartouche gauche coloré (largeur 430px avec auto-fit strict sur 394px)
+        left_x1, left_y1, left_x2, left_y2 = 48, 932, 478, 1058
+        left_max_w = (left_x2 - left_x1) - 36
+        d_ls.rounded_rectangle([left_x1, left_y1, left_x2, left_y2], radius=16, fill=badge_color)
+
+        f_live = get_font("arialbd", 19)
+        d_ls.ellipse([left_x1 + 18, left_y1 + 16, left_x1 + 30, left_y1 + 28], fill=(255, 255, 255))
+        d_ls.text((left_x1 + 38, left_y1 + 11), "EN DIRECT", fill=(255, 255, 255), font=f_live)
+
+        loc_draw, f_ls_loc, lw, lh = fit_text(loc_text, "arialbd", 30, left_max_w, 16)
+        d_ls.text((left_x1 + 18, left_y1 + 44), loc_draw, fill=(255, 255, 255), font=f_ls_loc)
+
+        b_draw, f_ls_badge, bw, bh = fit_text(b_text, "arialbd", 19, left_max_w, 13)
+        d_ls.text((left_x1 + 18, left_y1 + 92), b_draw, fill=(255, 235, 235), font=f_ls_badge)
+
+        # Partie droite : Titre + Sous-titre en haut, Bandeau Infos Météo en bas
+        right_x = 502
+        right_max_w = 1864 - right_x
+        combined_title = f"{t_text} — {s_text}" if s_text else t_text
+        ct_draw, f_ls_title, ctw, cth = fit_text(combined_title, "arialbd", 32, right_max_w, 17)
+        d_ls.text((right_x, 944), ct_draw, fill=(255, 255, 255), font=f_ls_title)
+
+        d_ls.line([right_x, 1002, 1864, 1002], fill=(255, 215, 60, 180), width=2)
+
+        tick_draw, f_ls_tick, ttw, tth = fit_text(f"INFOS MÉTÉO • {ticker_raw}", "segoeuib", 23, right_max_w, 15)
+        d_ls.text((right_x, 1016), tick_draw, fill=(255, 215, 60), font=f_ls_tick)
+
         overlay_ls = os.path.join(work_dir, f"overlay_ls_{sc_id}.png")
         ls_img.save(overlay_ls)
 
