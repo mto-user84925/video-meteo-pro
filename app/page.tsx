@@ -25,7 +25,9 @@ const DEFAULT_SCENES: Scene[] = [
     sub: "De très fortes pluies attendues dans le Sud-Est",
     location_tag: "SUD-EST",
     ticker: "Alerte fortes pluies • Cévennes, Languedoc, Provence • Météo-Climat Pro",
-    script_text: "Attention, un épisode méditerranéen marqué va frapper le Sud-Est de la France."
+    script_text: "Attention, un épisode méditerranéen marqué va frapper le Sud-Est de la France.",
+    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792153060_couverture_deluge_fortes_pluies_16_9.png",
+    file_name: "Photo_Déluge_Sud_Est.png"
   },
   {
     scene_number: 2,
@@ -35,7 +37,9 @@ const DEFAULT_SCENES: Scene[] = [
     sub: "Remontée d'air très doux et saturé en humidité",
     location_tag: "EUROPE",
     ticker: "Dépression d'altitude bloquée au sud-ouest • Flux de sud très dynamique",
-    script_text: "En altitude, une vaste goutte froide plonge vers la péninsule Ibérique et fait remonter un flux de sud très dynamique et chargé d'humidité méditerranéenne."
+    script_text: "En altitude, une vaste goutte froide plonge vers la péninsule Ibérique et fait remonter un flux de sud très dynamique et chargé d'humidité méditerranéenne.",
+    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152013_MeteoClimatPro_ECMWF_AIFS_0_25__Europe_geopotentiel-500-hpa_1792130672739.png",
+    file_name: "Geopotentiel_Europe.png"
   },
   {
     scene_number: 3,
@@ -45,7 +49,9 @@ const DEFAULT_SCENES: Scene[] = [
     sub: "Dimanche en Provence, extension lundi en Languedoc",
     location_tag: "SUD-EST",
     ticker: "Premières pluies dimanche 18 • Intensification lundi 19 sur le golfe du Lion",
-    script_text: "Les pluies orageuses vont rapidement s'intensifier et se bloquer durablement contre le relief."
+    script_text: "Les pluies orageuses vont rapidement s'intensifier et se bloquer durablement contre le relief.",
+    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152015_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151417749.gif",
+    file_name: "Radar_Precipitations.gif"
   },
   {
     scene_number: 4,
@@ -55,7 +61,9 @@ const DEFAULT_SCENES: Scene[] = [
     sub: "Pluies orageuses et saturation rapide des sols",
     location_tag: "SUD-EST",
     ticker: "Modélisation ECMWF AIFS 0.25° • Lames d'eau horaires soutenues • Risque ruissellement",
-    script_text: "Les lames d'eau horaires s'annoncent particulièrement intenses, saturant rapidement les sols déjà humides."
+    script_text: "Les lames d'eau horaires s'annoncent particulièrement intenses, saturant rapidement les sols déjà humides.",
+    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152014_MeteoClimatPro_ECMWF_AIFS_0_25__France_pluie-periode_1792130457894.png",
+    file_name: "Cumuls_Pluie_France.png"
   },
   {
     scene_number: 5,
@@ -65,7 +73,9 @@ const DEFAULT_SCENES: Scene[] = [
     sub: "Crues éclairs pendant les vacances scolaires • Météo-Climat Pro",
     location_tag: "SUD-EST",
     ticker: "Cévennes, Gard, Hérault, Rhône • Risque inondations vacances scolaires • Météo-Climat Pro",
-    script_text: "Regardez ce zoom sur le quart Sud-Est : le pic d'intensité est attendu entre mardi et mercredi, avec des pointes locales pouvant dépasser 160 millimètres sur les Cévennes, le Gard, l'Hérault et la vallée du Rhône, provoquant un risque majeur d'inondations et de crues éclairs, pendant les vacances scolaires Soyez très vigilants dans vos déplacements, et restez connectés avec METEO CLIMAT PRO."
+    script_text: "Regardez ce zoom sur le quart Sud-Est : le pic d'intensité est attendu entre mardi et mercredi, avec des pointes locales pouvant dépasser 160 millimètres sur les Cévennes, le Gard, l'Hérault et la vallée du Rhône, provoquant un risque majeur d'inondations et de crues éclairs, pendant les vacances scolaires Soyez très vigilants dans vos déplacements, et restez connectés avec METEO CLIMAT PRO.",
+    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152016_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151648872.png",
+    file_name: "Carte_Sud_Est_160mm.png"
   }
 ];
 
@@ -474,33 +484,48 @@ export default function StudioMeteoPage() {
                     {i === 0 && <span className="text-[10px] bg-red-500/20 text-red-400 font-bold px-1.5 py-0.5 rounded">Accroche ≤ 4s</span>}
                   </div>
 
-                  {/* APERÇU VIGNETTE DE LA CARTE EXTRAITE */}
-                  <label className={`w-full aspect-[4/3] rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center overflow-hidden cursor-pointer transition-all relative ${sc.file_url ? 'border-emerald-500/40 bg-slate-950' : 'border-slate-800 hover:border-sky-500 bg-slate-950'}`}>
-                    <input
-                      type="file"
-                      accept="image/*,.gif"
-                      className="hidden"
-                      onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
-                    />
+                  {/* APERÇU VIGNETTE DE LA CARTE */}
+                  <div className="w-full h-36 rounded-xl overflow-hidden relative border border-slate-700 bg-slate-950 group shadow-inner">
                     {sc.file_url ? (
-                      <div className="w-full h-full relative group">
-                        <img src={sc.file_url} alt={`Scène ${i+1}`} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all text-xs text-white font-bold gap-1">
-                          <Upload className="w-4 h-4" /> Changer
+                      <>
+                        <img
+                          src={sc.file_url}
+                          alt={`Scène ${i + 1}`}
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
+                        />
+                        <div className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-bold text-emerald-400 border border-emerald-500/40 flex items-center gap-1 shadow">
+                          <CheckCircle2 className="w-3 h-3" /> {i === 0 ? "Couverture" : `Carte ${i + 1}`}
                         </div>
-                      </div>
+                        <label className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all text-xs text-white font-bold gap-1.5 cursor-pointer backdrop-blur-xs">
+                          <Upload className="w-4 h-4 text-sky-400" /> Remplacer
+                          <input
+                            type="file"
+                            accept="image/*,.gif"
+                            className="hidden"
+                            onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
+                          />
+                        </label>
+                      </>
                     ) : (
-                      <div className="space-y-1 text-slate-500 p-2">
-                        <ImageIcon className="w-5 h-5 mx-auto" />
-                        <span className="text-[11px] block">{i === 0 ? "Photo Déluge" : "Carte Météo"}</span>
-                      </div>
+                      <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer hover:bg-slate-900/80 transition-all p-2 text-center border-2 border-dashed border-slate-800 hover:border-sky-500 rounded-xl">
+                        <input
+                          type="file"
+                          accept="image/*,.gif"
+                          className="hidden"
+                          onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
+                        />
+                        <ImageIcon className="w-5 h-5 text-slate-500 mb-1" />
+                        <span className="text-[11px] font-semibold text-slate-400">{i === 0 ? "Photo Couverture" : "Ajouter une carte"}</span>
+                        <span className="text-[9px] text-slate-600">PNG, JPG, GIF</span>
+                      </label>
                     )}
-                  </label>
+                  </div>
 
                   {/* TITRE & SOUS-TITRE */}
-                  <div className="mt-2.5 space-y-1">
+                  <div className="mt-2 space-y-1.5">
                     <input
                       type="text"
+                      placeholder="BADGE"
                       value={sc.badge}
                       onChange={e => {
                         const copy = [...scenes];
@@ -511,6 +536,7 @@ export default function StudioMeteoPage() {
                     />
                     <input
                       type="text"
+                      placeholder="TITRE DE LA SCÈNE"
                       value={sc.title}
                       onChange={e => {
                         const copy = [...scenes];
@@ -519,12 +545,32 @@ export default function StudioMeteoPage() {
                       }}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white font-bold"
                     />
+                    <input
+                      type="text"
+                      placeholder="Sous-titre court..."
+                      value={sc.sub || ""}
+                      onChange={e => {
+                        const copy = [...scenes];
+                        copy[i].sub = e.target.value;
+                        setScenes(copy);
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-400"
+                    />
                   </div>
                 </div>
 
                 {/* TEXTE VOIX OFF */}
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Voix Off Charon</label>
+                <div className="mt-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-400">Voix Off Charon</label>
+                    <span className={`text-[10px] font-bold ${
+                      i === 0
+                        ? (sc.script_text.trim().split(/\s+/).filter(Boolean).length <= 15 ? 'text-emerald-400' : 'text-amber-400')
+                        : 'text-slate-400'
+                    }`}>
+                      {sc.script_text.trim().split(/\s+/).filter(Boolean).length} mots (~{(sc.script_text.trim().split(/\s+/).filter(Boolean).length / 3.2).toFixed(1)}s)
+                    </span>
+                  </div>
                   <textarea
                     rows={4}
                     value={sc.script_text}
@@ -533,8 +579,13 @@ export default function StudioMeteoPage() {
                       copy[i].script_text = e.target.value;
                       setScenes(copy);
                     }}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 resize-none focus:outline-none focus:border-sky-500 leading-relaxed font-sans"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 resize-none focus:outline-none focus:border-sky-500 leading-relaxed font-sans"
                   />
+                  {i === 0 && sc.script_text.trim().split(/\s+/).filter(Boolean).length > 15 && (
+                    <p className="text-[9px] text-amber-400/90 mt-0.5 font-medium">
+                      ⚠️ Visez 12 à 15 mots max pour l'accroche ≤ 4s.
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
