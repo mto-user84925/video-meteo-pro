@@ -45,16 +45,33 @@ def get_font(name_pref, size):
             continue
     return ImageFont.load_default()
 
-def download_file(url, out_path):
+FALLBACK_MAPS = [
+    f"{SUPABASE_URL}/storage/v1/object/public/blog-images/blog/1792153060_couverture_deluge_fortes_pluies_16_9.png",
+    f"{SUPABASE_URL}/storage/v1/object/public/blog-images/blog/1792152013_MeteoClimatPro_ECMWF_AIFS_0_25__Europe_geopotentiel-500-hpa_1792130672739.png",
+    f"{SUPABASE_URL}/storage/v1/object/public/blog-images/blog/1792152014_MeteoClimatPro_ECMWF_AIFS_0_25__France_pluie-periode_1792130457894.png",
+    f"{SUPABASE_URL}/storage/v1/object/public/blog-images/blog/1792152016_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151648872.png"
+]
+
+def download_file(url, out_path, fallback_idx=0):
     print(f"📥 Téléchargement : {url} -> {out_path}")
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        }
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp, open(out_path, "wb") as f:
-        f.write(resp.read())
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "image/*,*/*;q=0.8"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp, open(out_path, "wb") as f:
+            f.write(resp.read())
+    except Exception as e:
+        print(f"⚠️ Échec téléchargement image ({e}) sur {url}")
+        print("🛡️ Bascule automatique sur une carte certifiée Supabase...")
+        fb_url = FALLBACK_MAPS[fallback_idx % len(FALLBACK_MAPS)]
+        req_fb = urllib.request.Request(fb_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req_fb, timeout=30) as resp, open(out_path, "wb") as f:
+            f.write(resp.read())
+        print(f"✅ Carte de secours injectée avec succès : {fb_url}")
 
 def upload_supabase(local_file, remote_path, content_type="video/mp4"):
     url = f"{SUPABASE_URL}/storage/v1/object/blog-images/{remote_path}"
@@ -164,7 +181,7 @@ def render(job_file):
         local_file = os.path.join(work_dir, f"{sc_id}_{os.path.basename(file_input.split('?')[0])}")
         
         if file_input.startswith("http://") or file_input.startswith("https://"):
-            download_file(file_input, local_file)
+            download_file(file_input, local_file, idx)
         else:
             import shutil
             shutil.copyfile(file_input, local_file)
