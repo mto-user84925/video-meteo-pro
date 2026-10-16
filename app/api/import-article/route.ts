@@ -131,7 +131,7 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
     }
 
     const low = resolved.toLowerCase();
-    if (low.endsWith(".svg")) continue;
+    if (low.endsWith(".svg") || resolved === baseUrl) continue;
     if ((low.match(/\(/g) || []).length !== (low.match(/\)/g) || []).length) continue; // URL tronquée
     const crop = low.match(/\/crop\/(\d+)x(\d+)\//);
     if (crop && Number(crop[1]) < 400) continue; // vignettes d'articles liés

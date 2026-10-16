@@ -131,17 +131,21 @@ def upload_supabase(local_file, remote_path, content_type="video/mp4"):
 def progress(session_id, pct, text, kind="info"):
     """Publie l'avancement réel (lu par /api/status puis affiché dans le journal)."""
     print(f"[{pct}%] {text}")
-    try:
-        req = urllib.request.Request(
-            f"{SUPABASE_URL}/storage/v1/object/blog-images/renders/{session_id}/progress.json",
-            data=json.dumps({"pct": pct, "text": text, "type": kind, "ts": int(time.time())}).encode("utf-8"),
-            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
-                     "Content-Type": "application/json", "x-upsert": "true"},
-            method="POST"
-        )
-        urllib.request.urlopen(req, timeout=15).read()
-    except Exception as e:
-        print(f"⚠️ progress non publié : {e}")
+    data = json.dumps({"pct": pct, "text": text, "type": kind, "ts": int(time.time())}).encode("utf-8")
+    for method in ("POST", "PUT"):
+        try:
+            req = urllib.request.Request(
+                f"{SUPABASE_URL}/storage/v1/object/blog-images/renders/{session_id}/progress.json",
+                data=data,
+                headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                         "Content-Type": "application/json"},
+                method=method
+            )
+            urllib.request.urlopen(req, timeout=15).read()
+            return
+        except Exception as e:
+            err = e
+    print(f"⚠️ progress non publié : {err}")
 
 def tts_charon(text, out_wav):
     url = "https://openrouter.ai/api/v1/audio/speech"
