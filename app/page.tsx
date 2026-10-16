@@ -653,6 +653,13 @@ export default function StudioMeteoPage() {
                         <img
                           src={sc.file_url}
                           alt={`Scène ${i + 1}`}
+                          onError={(e) => {
+                            const target = e.currentTarget as HTMLImageElement;
+                            if (!target.dataset.fallback) {
+                              target.dataset.fallback = "true";
+                              target.src = DEFAULT_SCENES[i % DEFAULT_SCENES.length]?.file_url || "";
+                            }
+                          }}
                           className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
                         />
                         <div className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-bold text-emerald-400 border border-emerald-500/40 flex items-center gap-1 shadow">

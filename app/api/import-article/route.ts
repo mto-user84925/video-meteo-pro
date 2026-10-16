@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const maxDuration = 60;
+
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://ubdevaemtwbzxksjlhjg.supabase.co";
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
@@ -53,8 +55,8 @@ export async function POST(req: Request) {
     let contentImages: string[] = [];
     let articleText = "";
 
-    // 1. Détection si c'est un article interne de notre réseau (MétéoBTP / Monsieur Météo / Climat-Météo)
-    const isOurNetwork = url.includes("meteobtp.fr") || url.includes("monsieurmeteo.com") || url.includes("climat-meteo.vercel.app") || url.includes("actualites/");
+    // 1. Détection stricte si l'article est hébergé sur notre propre réseau Supabase
+    const isOurNetwork = url.includes("meteobtp.fr") || url.includes("monsieurmeteo.com") || url.includes("climat-meteo.vercel.app");
     
     if (isOurNetwork) {
       const urlParts = url.split("?")[0].replace(/\/+$/, "").split("/");
@@ -92,17 +94,22 @@ export async function POST(req: Request) {
         const pageRes = await fetch(url, {
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-          }
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
+          },
+          signal: AbortSignal.timeout(10000)
         });
         const html = await pageRes.text();
 
-        // Titre
+        // Extraction Titre
         const ogTitleMatch = html.match(/<meta\s+[^>]*(?:property|name)=["'](?:og:title|twitter:title)["'][^>]*content=["']([^"']+)["']/i) ||
                              html.match(/<meta\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["'](?:og:title|twitter:title)["']/i);
+        const titleTagMatch = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
         const h1Match = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
-        if (!title && ogTitleMatch) title = ogTitleMatch[1];
-        if (!title && h1Match) title = h1Match[1].replace(/<[^>]+>/g, "").trim();
+
+        if (ogTitleMatch) title = ogTitleMatch[1];
+        else if (h1Match) title = h1Match[1].replace(/<[^>]+>/g, "").trim();
+        else if (titleTagMatch) title = titleTagMatch[1].replace(/<[^>]+>/g, "").trim();
 
         // Récupération de tous les candidats d'images
         const rawCandidates: string[] = [];
@@ -151,38 +158,42 @@ export async function POST(req: Request) {
           if (!validUrls.includes(resolved)) validUrls.push(resolved);
         }
 
-        // Téléversement miroir des meilleures images sur Supabase Storage (pour affichage immédiat 100% garanti)
-        const mirrored: string[] = [];
-        for (let i = 0; i < Math.min(8, validUrls.length); i++) {
-          const candidate = validUrls[i];
-          if (candidate.includes("supabase.co/storage")) {
-            mirrored.push(candidate);
-            continue;
-          }
-          try {
-            const imgRes = await fetch(candidate, {
-              headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": url
+        // Téléversement miroir EN PARALLÈLE des meilleures images vers Supabase Storage
+        const toMirror = validUrls.slice(0, 6);
+        const mirrorResults = await Promise.all(
+          toMirror.map(async (candidate) => {
+            if (candidate.includes("supabase.co/storage")) return candidate;
+            try {
+              const imgRes = await fetch(candidate, {
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                  "Referer": url
+                },
+                signal: AbortSignal.timeout(6000)
+              });
+              if (imgRes.ok) {
+                const buf = await imgRes.arrayBuffer();
+                if (buf.byteLength >= 4000) {
+                  const cType = imgRes.headers.get("content-type") || "image/jpeg";
+                  const ext = cType.includes("png") ? "png" : cType.includes("gif") ? "gif" : "jpg";
+                  const supaUrl = await uploadToSupabase(buf, cType, ext);
+                  if (supaUrl) return supaUrl;
+                }
               }
-            });
-            if (imgRes.ok) {
-              const buf = await imgRes.arrayBuffer();
-              if (buf.byteLength >= 5000) {
-                const cType = imgRes.headers.get("content-type") || "image/jpeg";
-                const ext = cType.includes("png") ? "png" : cType.includes("gif") ? "gif" : "jpg";
-                const supaUrl = await uploadToSupabase(buf, cType, ext);
-                if (supaUrl) mirrored.push(supaUrl);
-              }
+            } catch (e) {
+              console.error("Échec miroir image:", candidate);
             }
-          } catch (e) {
-            console.error("Échec miroir image:", candidate, e);
-          }
-        }
+            return candidate;
+          })
+        );
 
-        if (mirrored.length > 0) {
-          coverImage = mirrored[0];
-          contentImages = mirrored.slice(1);
+        const cleanMirrored = mirrorResults.filter(Boolean) as string[];
+        if (cleanMirrored.length > 0) {
+          coverImage = cleanMirrored[0];
+          contentImages = cleanMirrored.slice(1);
+        } else if (validUrls.length > 0) {
+          coverImage = validUrls[0];
+          contentImages = validUrls.slice(1);
         }
 
         // Extraction du texte de l'article
@@ -200,6 +211,10 @@ export async function POST(req: Request) {
 
     if (!coverImage && contentImages.length > 0) {
       coverImage = contentImages.shift() || "";
+    }
+
+    if (!articleText && title) {
+      articleText = title;
     }
 
     // 3. Appel OpenRouter Gemini Flash calibré sur la durée cible
@@ -237,38 +252,59 @@ Format JSON STRICT :
   ]
 }`;
 
-      const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://video-meteo-pro.vercel.app",
-          "X-Title": "Video Meteo Pro Auto Import"
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: `Titre : ${title}\n\nContenu de l'article :\n${articleText}\n\nDurée vidéo ciblée : ${durationSec} secondes (environ ${totalWordsTarget} mots pour ${numScenes} scènes).` }
-          ],
-          temperature: 0.3,
-          response_format: { type: "json_object" }
-        })
-      });
+      try {
+        const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://video-meteo-pro.vercel.app",
+            "X-Title": "Video Meteo Pro Auto Import"
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: `Titre : ${title}\n\nContenu de l'article :\n${articleText}\n\nDurée vidéo ciblée : ${durationSec} secondes (environ ${totalWordsTarget} mots pour ${numScenes} scènes).` }
+            ],
+            temperature: 0.3,
+            response_format: { type: "json_object" }
+          }),
+          signal: AbortSignal.timeout(15000)
+        });
 
-      if (aiRes.ok) {
-        const aiData = await aiRes.json();
-        const parsed = JSON.parse(aiData.choices?.[0]?.message?.content || "{}");
-        generatedScenes = parsed.scenes || [];
-        detectedPhenomenon = parsed.phenomenon || "";
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          const parsed = JSON.parse(aiData.choices?.[0]?.message?.content || "{}");
+          generatedScenes = parsed.scenes || [];
+          detectedPhenomenon = parsed.phenomenon || "";
+        }
+      } catch (aiErr) {
+        console.error("Erreur IA Gemini Flash:", aiErr);
       }
     }
 
-    // Répartition et recyclage des images (redémarrage en boucle à la première si pas assez d'images)
+    // Répartition et recyclage circulaire des images
     const availableImages = [coverImage, ...contentImages].filter(Boolean);
     const pool = availableImages.length > 0 ? availableImages : DEFAULT_FALLBACK_IMAGES;
 
-    const finalScenes = generatedScenes.map((sc, i) => {
+    // Si l'IA n'a pas pu générer les scènes, on construit les scènes par défaut
+    const baseScenes = (generatedScenes && generatedScenes.length >= 2)
+      ? generatedScenes
+      : Array.from({ length: numScenes }, (_, idx) => ({
+          scene_number: idx + 1,
+          badge: idx === 0 ? "ALERTE MÉTÉO" : "ANALYSE MÉTÉO",
+          badge_color: idx === 0 ? [220, 30, 30] : [30, 120, 240],
+          title: title || `SCÈNE ${idx + 1}`,
+          sub: "Prévisions et suivi météorologique • Météo-Climat Pro",
+          location_tag: "FRANCE",
+          ticker: "Suivi en direct • Modélisations haute résolution • Météo-Climat Pro",
+          script_text: idx === 0
+            ? (title ? `Attention, ${title}.` : "Attention aux intempéries prévues dans les prochaines heures.")
+            : "Suivez attentivement l'évolution des conditions météorologiques et restez connectés avec METEO CLIMAT PRO."
+        }));
+
+    const finalScenes = baseScenes.map((sc, i) => {
       const chosenUrl = pool[i % pool.length];
       return {
         ...sc,
@@ -279,11 +315,11 @@ Format JSON STRICT :
 
     return NextResponse.json({
       success: true,
-      title,
-      phenomenon: detectedPhenomenon,
+      title: title || "Actualité Météo",
+      phenomenon: detectedPhenomenon || "Épisode méditerranéen / Cévenol",
       cover_image: coverImage || pool[0],
       content_images: contentImages.length > 0 ? contentImages : pool.slice(1),
-      scenes: finalScenes.length >= 2 ? finalScenes : null
+      scenes: finalScenes
     });
 
   } catch (error: any) {
