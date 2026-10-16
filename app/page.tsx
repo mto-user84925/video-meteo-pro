@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon, Terminal } from "lucide-react";
+import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon, Terminal, Plus, Trash2 } from "lucide-react";
 
 interface LogEntry {
   id: string;
@@ -252,6 +252,39 @@ export default function StudioMeteoPage() {
     }
   };
 
+  // Ajout manuel d'une nouvelle scène
+  const handleAddScene = () => {
+    const nextNum = scenes.length + 1;
+    const newScene: Scene = {
+      scene_number: nextNum,
+      badge: "ÉVOLUTION DU PHÉNOMÈNE",
+      badge_color: [30, 120, 240],
+      title: `SCÈNE ${nextNum}`,
+      sub: "Précisions et évolution météo",
+      location_tag: "FRANCE",
+      ticker: "Suivi météorologique en direct • Météo-Climat Pro",
+      script_text: "Décrivez ici les conditions météorologiques ou prévisions détaillées pour cette scène.",
+      file_url: "",
+      file_name: ""
+    };
+    setScenes([...scenes, newScene]);
+  };
+
+  // Suppression d'une scène
+  const handleRemoveScene = (indexToRemove: number) => {
+    if (scenes.length <= 2) {
+      alert("Une vidéo doit comporter au moins 2 scènes.");
+      return;
+    }
+    const updated = scenes
+      .filter((_, idx) => idx !== indexToRemove)
+      .map((sc, idx) => ({
+        ...sc,
+        scene_number: idx + 1
+      }));
+    setScenes(updated);
+  };
+
   // Lancement du rendu double format
   const handleStartRender = async () => {
     const missing = scenes.find(s => !s.file_url);
@@ -276,18 +309,22 @@ export default function StudioMeteoPage() {
       { id: "init_1", time: getNowStr(), text: "🚀 Démarrage du job de rendu et envoi à la régie cloud...", type: "info" }
     ]);
 
+    const voiceMilestones = scenes.map((sc, idx) => ({
+      sec: 4 + idx * 5,
+      text: `🎙️ Scène ${idx + 1} : Synthèse vocale Gemini 3.8 Flash TTS (Voix Charon${idx === 0 ? " - Accroche ≤ 4s" : ""})...`,
+      type: "voice" as const,
+      pct: Math.min(68, 20 + Math.round((idx / scenes.length) * 48))
+    }));
+
+    const endOffset = 4 + scenes.length * 5;
     const plannedMilestones = [
-      { sec: 2, text: "📥 Téléchargement des 5 cartes & visuels haute résolution...", type: "info", pct: 15 },
-      { sec: 6, text: "🎙️ Scène 1 : Synthèse vocale Gemini 3.8 Flash TTS (Voix Charon - Accroche ≤ 4s)...", type: "voice", pct: 25 },
-      { sec: 11, text: "🎙️ Scène 2 : Génération voix off Charon (Analyse synoptique d'altitude)...", type: "voice", pct: 35 },
-      { sec: 16, text: "🎙️ Scène 3 : Génération voix off Charon (Chronologie du front & radar animée)...", type: "voice", pct: 45 },
-      { sec: 21, text: "🎙️ Scène 4 : Génération voix off Charon (Lames d'eau horaires & cumuls)...", type: "voice", pct: 55 },
-      { sec: 26, text: "🎙️ Scène 5 : Génération voix off Charon (Paroxysme & signature Météo-Climat Pro)...", type: "voice", pct: 65 },
-      { sec: 32, text: "🎵 Concaténation audio et normalisation Broadcast (-14.5 LUFS)...", type: "audio", pct: 75 },
-      { sec: 38, text: "📱 Encodage vidéo TikTok 9:16 (1080x1920) avec overlays et dynamic blur...", type: "video", pct: 85 },
-      { sec: 44, text: "🖥️ Encodage vidéo Paysage 16:9 (1920x1080) avec incrustation direct TV...", type: "video", pct: 92 },
-      { sec: 50, text: "🛡️ Freeze-frame padding (garantie anti-écran noir) & mixage musical (-26 dB)...", type: "audio", pct: 96 },
-      { sec: 56, text: "☁️ Téléversement haute vitesse sur Supabase Cloud Storage...", type: "info", pct: 98 },
+      { sec: 2, text: `📥 Téléchargement des ${scenes.length} cartes & visuels haute résolution...`, type: "info" as const, pct: 15 },
+      ...voiceMilestones,
+      { sec: endOffset + 3, text: "🎵 Concaténation audio et normalisation Broadcast (-14.5 LUFS)...", type: "audio" as const, pct: 75 },
+      { sec: endOffset + 8, text: "📱 Encodage vidéo TikTok 9:16 (1080x1920) avec overlays et dynamic blur...", type: "video" as const, pct: 85 },
+      { sec: endOffset + 14, text: "🖥️ Encodage vidéo Paysage 16:9 (1920x1080) avec incrustation direct TV...", type: "video" as const, pct: 92 },
+      { sec: endOffset + 20, text: "🛡️ Freeze-frame padding (garantie anti-écran noir) & mixage musical (-26 dB)...", type: "audio" as const, pct: 96 },
+      { sec: endOffset + 26, text: "☁️ Téléversement haute vitesse sur Supabase Cloud Storage...", type: "info" as const, pct: 98 },
     ];
 
     try {
@@ -528,22 +565,43 @@ export default function StudioMeteoPage() {
           </div>
         </section>
 
-        {/* ÉTAPE 2 : LES 5 SCÈNES DU BULLETIN (AVEC VIGNETTES DES CARTES EXTRACTES) */}
+        {/* ÉTAPE 2 : LES SCÈNES DU BULLETIN (DYNAMIQUES : AJOUT / SUPPRESSION LIBRE) */}
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <span>🖼️ Les 5 Scènes du Bulletin (Cartes & Voix Off Charon)</span>
-            </h2>
-            <span className="text-xs text-slate-400">Cliquez sur une vignette pour changer une image si besoin</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>🖼️ Les Scènes du Bulletin ({scenes.length} scènes configurées)</span>
+              </h2>
+              <span className="text-xs text-slate-400">Ajoutez, supprimez ou personnalisez chaque scène, carte et voix off à volonté.</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleAddScene}
+              className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all w-fit cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" /> Ajouter une scène
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             {scenes.map((sc, i) => (
               <div key={i} className="bg-slate-900/70 border border-slate-800 rounded-2xl p-3 flex flex-col justify-between space-y-3 relative group hover:border-slate-700 transition-all shadow-md">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-300">Scène {i + 1}</span>
-                    {i === 0 && <span className="text-[10px] bg-red-500/20 text-red-400 font-bold px-1.5 py-0.5 rounded">Accroche ≤ 4s</span>}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-300">Scène {i + 1}</span>
+                      {i === 0 && <span className="text-[10px] bg-red-500/20 text-red-400 font-bold px-1.5 py-0.5 rounded">Accroche ≤ 4s</span>}
+                    </div>
+                    {scenes.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveScene(i)}
+                        title={`Supprimer la scène ${i + 1}`}
+                        className="text-slate-500 hover:text-red-400 p-1 rounded-md hover:bg-red-500/10 transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* APERÇU VIGNETTE DE LA CARTE */}
