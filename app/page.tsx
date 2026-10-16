@@ -422,7 +422,7 @@ export default function StudioMeteoPage() {
           console.error(err);
         }
 
-        if (attempts > 90) {
+        if (attempts > 360) {
           clearInterval(timerInterval);
           clearInterval(statusInterval);
           setRendering(false);
