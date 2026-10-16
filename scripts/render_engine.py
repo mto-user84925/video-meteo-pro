@@ -66,6 +66,18 @@ def download_file(url, out_path, fallback_idx=0):
             f.write(resp.read())
     except Exception as e:
         print(f"⚠️ Échec téléchargement image ({e}) sur {url}")
+        try:
+            from curl_cffi import requests as cffi
+            origin = "/".join(url.split("/")[:3]) + "/"
+            r = cffi.get(url, impersonate="chrome124", headers={"Referer": origin}, timeout=30)
+            if r.status_code == 200 and len(r.content) > 5000 and r.headers.get("content-type", "").startswith("image/"):
+                with open(out_path, "wb") as f:
+                    f.write(r.content)
+                print(f"✅ Image récupérée via empreinte Chrome : {url}")
+                return
+            print(f"⚠️ Empreinte Chrome refusée : HTTP {r.status_code}")
+        except Exception as e2:
+            print(f"⚠️ Empreinte Chrome indisponible : {e2}")
         print("🛡️ Bascule automatique sur une carte certifiée Supabase...")
         fb_url = FALLBACK_MAPS[fallback_idx % len(FALLBACK_MAPS)]
         req_fb = urllib.request.Request(fb_url, headers={"User-Agent": "Mozilla/5.0"})

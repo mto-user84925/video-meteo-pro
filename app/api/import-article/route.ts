@@ -132,6 +132,9 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
 
     const low = resolved.toLowerCase();
     if (low.endsWith(".svg")) continue;
+    if ((low.match(/\(/g) || []).length !== (low.match(/\)/g) || []).length) continue; // URL tronquée
+    const crop = low.match(/\/crop\/(\d+)x(\d+)\//);
+    if (crop && Number(crop[1]) < 400) continue; // vignettes d'articles liés
 
     const hasBanned = bannedKeywords.some(b => low.includes(b));
     const isWhitelisted = weatherWhitelist.some(w => low.includes(w));
@@ -372,11 +375,10 @@ export async function POST(req: Request) {
               }
             }
 
-            // Récupération complémentaire des images depuis le markdown de Jina
-            const mdImages = [...(jData.content || "").matchAll(/!\[([^\]]*)\]\((https?:\/\/[^\s\)]+)\)/g)];
-            for (const mi of mdImages) {
-              if (mi[2]) rawImageCandidates.push(mi[2]);
-            }
+            // Récupération complémentaire : URLs d'images complètes (même avec parenthèses type filters:quality(80))
+            const fullImgUrls = (jData.content || "").match(/https?:\/\/[^\s"'<>\]]+?\.(?:jpe?g|png|webp|gif|avif)(?:\?[^\s"'<>\])]*)?/gi) || [];
+            for (const fu of fullImgUrls) rawImageCandidates.push(fu);
+
           }
         }
       } catch (jinaErr) {
@@ -417,7 +419,7 @@ export async function POST(req: Request) {
           // essai suivant
         }
       }
-      return null; // ponytail: jamais d'URL hotlink brute, le renderer (IP datacenter) se ferait bloquer en 403
+      return candidate; // ponytail: miroir impossible ici (CDN bloque Vercel) ; render_engine retente avec empreinte Chrome puis carte de secours
     };
 
     const mirrorResults = await Promise.all(toMirror.map(mirrorOne));
