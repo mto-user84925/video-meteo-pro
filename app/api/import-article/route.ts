@@ -89,7 +89,7 @@ async function uploadToSupabase(buffer: ArrayBuffer, contentType: string, ext = 
         "Authorization": `Bearer ${SUPABASE_KEY}`,
         "Content-Type": contentType || "image/jpeg"
       },
-      body: buffer
+      body: Buffer.from(buffer)
     });
     if (res.ok) {
       return `${SUPABASE_URL}/storage/v1/object/public/blog-images/${remotePath}`;
@@ -398,9 +398,9 @@ export async function POST(req: Request) {
           const imgRes = await fetch(candidate, {
             headers: {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-              "Referer": cleanUrl
+              "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
             },
-            signal: AbortSignal.timeout(6000)
+            signal: AbortSignal.timeout(8000)
           });
           if (imgRes.ok) {
             const buf = await imgRes.arrayBuffer();
