@@ -170,10 +170,10 @@ def render(job_file):
         print(f"🎙️ [Scène {idx+1}] Génération voix off Charon : \"{sc_in['script_text'][:40]}...\"")
         tts_charon(sc_in["script_text"], raw_wav)
 
-        # Trimming des silences superflus
+        # Trimming uniquement des silences de début et de fin (sans couper les respirations internes)
         subprocess.run([
             "ffmpeg", "-y", "-i", raw_wav,
-            "-af", "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.03:stop_periods=1:stop_threshold=-45dB:stop_silence=0.08",
+            "-af", "silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.04,areverse,silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.08,areverse",
             "-ar", "48000", "-ac", "2",
             clean_wav
         ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -182,18 +182,20 @@ def render(job_file):
             "ffprobe", "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", clean_wav
         ]).decode().strip())
+        print(f"   ⏱️ Durée Scène {idx+1} : {dur:.2f}s")
 
         # Contrainte stricte pour la scène 1 (Accroche <= 4.0s)
         if idx == 0 and dur > 4.0:
-            speed_ratio = dur / 3.9
+            speed_ratio = min(dur / 3.9, 1.35)
             speed_wav = os.path.join(work_dir, f"{sc_id}_speed.wav")
             subprocess.run([
                 "ffmpeg", "-y", "-i", clean_wav,
-                "-af", f"atempo={speed_ratio:.2f}",
+                "-af", f"atempo={speed_ratio:.3f}",
                 speed_wav
             ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             clean_wav = speed_wav
             dur = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_wav]).decode().strip())
+            print(f"   ⚡ Scène 1 ajustée à : {dur:.2f}s")
 
         audio_segments.append(clean_wav)
 
@@ -299,11 +301,10 @@ def render(job_file):
         else:
             badge_filter = "[comp2]null"
 
-        y_pos = (1920 - sc["card_h"]) // 2
         filter_complex = (
-            f"[0:v]scale=1080:{sc['card_h']}[main]; "
+            f"[0:v]scale=1080:1300:force_original_aspect_ratio=decrease[main]; "
             f"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,vflip,boxblur=35:5,eq=brightness=-0.08[bg_mirror]; "
-            f"[bg_mirror][main]overlay=0:{y_pos}[comp1]; "
+            f"[bg_mirror][main]overlay=(W-w)/2:330+(1350-h)/2[comp1]; "
             f"[comp1][1:v]overlay=0:0[comp2]; "
             f"{badge_filter}{tpad_str}[outv]"
         )
@@ -346,8 +347,8 @@ def render(job_file):
 
         filter_complex = (
             f"[0:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=25:5,eq=brightness=-0.12[bg]; "
-            f"[0:v]scale=-1:1080[fg]; "
-            f"[bg][fg]overlay=(1920-w)/2:0[comp]; "
+            f"[0:v]scale=1920:930:force_original_aspect_ratio=decrease[fg]; "
+            f"[bg][fg]overlay=(W-w)/2:(930-h)/2[comp]; "
             f"[comp][1:v]overlay=0:0{tpad_str}[outv]"
         )
 
@@ -383,13 +384,14 @@ def render(job_file):
             "-i", master_norm_wav,
             "-stream_loop", "-1", "-i", MUSIC_PATH,
             "-filter_complex",
-            f"[2:a]atrim=0:{TARGET_DUR:.3f},asetpts=PTS-STARTPTS,volume=-26dB,afade=t=in:ss=0:d=1.0,afade=t=out:st={TARGET_DUR-1.0:.3f}:d=1.0[m]; "
+            f"[2:a]atrim=0:{TARGET_DUR:.3f},asetpts=PTS-STARTPTS,volume=-26dB,afade=t=in:ss=0:d=1.0,afade=t=out:st={max(0.1, TARGET_DUR-1.0):.3f}:d=1.0[m]; "
             f"[1:a]atrim=0:{TARGET_DUR:.3f},asetpts=PTS-STARTPTS[v_speech]; "
             f"[v_speech][m]amix=inputs=2:dropout_transition=0:normalize=0[aout]",
             "-map", "0:v:0",
             "-map", "[aout]",
             "-c:v", "copy",
             "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart",
             "-t", f"{TARGET_DUR:.3f}",
             v_out
         ]
