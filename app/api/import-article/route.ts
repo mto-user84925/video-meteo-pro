@@ -4,12 +4,48 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "https://ubdevaemtwbzxksjlhjg.s
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 
+const DEFAULT_FALLBACK_IMAGES = [
+  "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792153060_couverture_deluge_fortes_pluies_16_9.png",
+  "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152013_MeteoClimatPro_ECMWF_AIFS_0_25__Europe_geopotentiel-500-hpa_1792130672739.png",
+  "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152015_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151417749.gif",
+  "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152014_MeteoClimatPro_ECMWF_AIFS_0_25__France_pluie-periode_1792130457894.png",
+  "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152016_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151648872.png"
+];
+
+// Téléversement d'une image distante vers Supabase Storage pour contourner CORS et blocages hotlinking
+async function uploadToSupabase(buffer: ArrayBuffer, contentType: string, ext = "jpg"): Promise<string | null> {
+  const remotePath = `renders/imports/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const uploadUrl = `${SUPABASE_URL}/storage/v1/object/blog-images/${remotePath}`;
+  try {
+    const res = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": contentType || "image/jpeg"
+      },
+      body: buffer
+    });
+    if (res.ok) {
+      return `${SUPABASE_URL}/storage/v1/object/public/blog-images/${remotePath}`;
+    }
+  } catch (err) {
+    console.error("Erreur téléversement Supabase:", err);
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
-    const { url } = await req.json();
+    const { url, target_duration = 60, scene_count = 5 } = await req.json();
     if (!url) {
       return NextResponse.json({ error: "URL manquante" }, { status: 400 });
     }
+
+    const durationSec = Number(target_duration) || 60;
+    const numScenes = Math.max(2, Math.min(10, Number(scene_count) || 5));
+    const totalWordsTarget = Math.round(durationSec * 2.9);
+    const wordsPerLaterScene = Math.round((totalWordsTarget - 14) / (numScenes - 1));
 
     let title = "";
     let excerpt = "";
@@ -17,15 +53,13 @@ export async function POST(req: Request) {
     let contentImages: string[] = [];
     let articleText = "";
 
-    // 1. Détection si c'est un article MétéoBTP / Monsieur Météo / Climat-Météo
+    // 1. Détection si c'est un article interne de notre réseau (MétéoBTP / Monsieur Météo / Climat-Météo)
     const isOurNetwork = url.includes("meteobtp.fr") || url.includes("monsieurmeteo.com") || url.includes("climat-meteo.vercel.app") || url.includes("actualites/");
     
     if (isOurNetwork) {
-      // Extraire le slug depuis l'URL
       const urlParts = url.split("?")[0].replace(/\/+$/, "").split("/");
       const slug = urlParts[urlParts.length - 1];
 
-      // Requête Supabase meteo_posts
       const supaUrl = `${SUPABASE_URL}/rest/v1/meteo_posts?select=title,excerpt,content,image_url&slug=eq.${slug}`;
       const supaRes = await fetch(supaUrl, {
         headers: {
@@ -43,7 +77,6 @@ export async function POST(req: Request) {
           coverImage = post.image_url || "";
           articleText = `${title}\n${excerpt}\n` + (post.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
-          // Extraire les URLs d'images depuis le HTML
           const regex = /src=["'](https:\/\/[^"']+)["']/g;
           let match;
           while ((match = regex.exec(post.content || "")) !== null) {
@@ -53,39 +86,115 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. Si pas trouvé sur Supabase ou lien externe : Scraping web standard
+    // 2. Si pas trouvé sur Supabase ou lien externe : Scraping universel haute fidélité
     if (!coverImage || contentImages.length === 0) {
       try {
         const pageRes = await fetch(url, {
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+          }
         });
         const html = await pageRes.text();
 
-        // Extraire og:title et og:image
-        const ogTitleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
-        const ogImageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-
+        // Titre
+        const ogTitleMatch = html.match(/<meta\s+[^>]*(?:property|name)=["'](?:og:title|twitter:title)["'][^>]*content=["']([^"']+)["']/i) ||
+                             html.match(/<meta\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["'](?:og:title|twitter:title)["']/i);
+        const h1Match = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
         if (!title && ogTitleMatch) title = ogTitleMatch[1];
-        if (!coverImage && ogImageMatch) coverImage = ogImageMatch[1];
+        if (!title && h1Match) title = h1Match[1].replace(/<[^>]+>/g, "").trim();
 
-        // Extraire les images
-        const imgRegex = /<img[^>]+src=["'](https?:\/\/[^"']+)["']/gi;
-        let match;
-        while ((match = imgRegex.exec(html)) !== null) {
-          const imgUrl = match[1];
-          if (!imgUrl.includes("logo") && !imgUrl.includes("icon") && !imgUrl.includes("avatar") && !contentImages.includes(imgUrl)) {
-            contentImages.push(imgUrl);
+        // Récupération de tous les candidats d'images
+        const rawCandidates: string[] = [];
+        
+        // Balises meta (og:image / twitter:image)
+        const metaImgMatches = [
+          ...html.matchAll(/<meta\s+[^>]*(?:property|name)=["'](?:og:image|twitter:image)["'][^>]*content=["']([^"']+)["']/gi),
+          ...html.matchAll(/<meta\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["'](?:og:image|twitter:image)["']/gi)
+        ];
+        for (const m of metaImgMatches) {
+          if (m[1]) rawCandidates.push(m[1]);
+        }
+
+        // Balises <img> (src, data-src, data-original, srcset, etc.)
+        const imgRegex = /<img\b([^>]+)>/gi;
+        let imgM;
+        while ((imgM = imgRegex.exec(html)) !== null) {
+          const tag = imgM[1];
+          const attrMatch = tag.match(/(?:src|data-src|data-original|data-lazy-src)=["']([^"']+)["']/i);
+          if (attrMatch) rawCandidates.push(attrMatch[1]);
+
+          const srcsetMatch = tag.match(/srcset=["']([^"']+)["']/i);
+          if (srcsetMatch) {
+            const parts = srcsetMatch[1].split(",").map(p => p.trim().split(/\s+/)[0]);
+            if (parts.length > 0) rawCandidates.push(parts[parts.length - 1]);
           }
         }
 
-        // Extraire texte brut
+        // Nettoyage et normalisation des URLs d'images
+        const validUrls: string[] = [];
+        for (let raw of rawCandidates) {
+          if (!raw || raw.startsWith("data:")) continue;
+          if (raw.includes("url=")) {
+            const uMatch = raw.match(/url=([^&]+)/);
+            if (uMatch) raw = decodeURIComponent(uMatch[1]);
+          }
+          raw = raw.replace(/&amp;/g, "&");
+          let resolved = raw;
+          try {
+            if (raw.startsWith("//")) resolved = "https:" + raw;
+            else if (raw.startsWith("/") || !raw.startsWith("http")) resolved = new URL(raw, url).href;
+          } catch { continue; }
+
+          const low = resolved.toLowerCase();
+          if (low.includes("logo") || low.includes("icon") || low.includes("avatar") || low.includes("favicon") || low.endsWith(".svg")) continue;
+          if (!validUrls.includes(resolved)) validUrls.push(resolved);
+        }
+
+        // Téléversement miroir des meilleures images sur Supabase Storage (pour affichage immédiat 100% garanti)
+        const mirrored: string[] = [];
+        for (let i = 0; i < Math.min(8, validUrls.length); i++) {
+          const candidate = validUrls[i];
+          if (candidate.includes("supabase.co/storage")) {
+            mirrored.push(candidate);
+            continue;
+          }
+          try {
+            const imgRes = await fetch(candidate, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Referer": url
+              }
+            });
+            if (imgRes.ok) {
+              const buf = await imgRes.arrayBuffer();
+              if (buf.byteLength >= 5000) {
+                const cType = imgRes.headers.get("content-type") || "image/jpeg";
+                const ext = cType.includes("png") ? "png" : cType.includes("gif") ? "gif" : "jpg";
+                const supaUrl = await uploadToSupabase(buf, cType, ext);
+                if (supaUrl) mirrored.push(supaUrl);
+              }
+            }
+          } catch (e) {
+            console.error("Échec miroir image:", candidate, e);
+          }
+        }
+
+        if (mirrored.length > 0) {
+          coverImage = mirrored[0];
+          contentImages = mirrored.slice(1);
+        }
+
+        // Extraction du texte de l'article
         const textClean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
                               .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+                              .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, "")
+                              .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, "")
                               .replace(/<[^>]+>/g, " ")
                               .replace(/\s+/g, " ");
-        articleText = textClean.slice(0, 3000);
+        articleText = textClean.slice(0, 4500);
       } catch (err) {
-        console.error("Scraping error:", err);
+        console.error("Erreur scraping web:", err);
       }
     }
 
@@ -93,24 +202,26 @@ export async function POST(req: Request) {
       coverImage = contentImages.shift() || "";
     }
 
-    // 3. Appel OpenRouter Gemini Flash pour générer les 5 scènes avec le contenu exact extrait
+    // 3. Appel OpenRouter Gemini Flash calibré sur la durée cible
     let generatedScenes: any[] = [];
     let detectedPhenomenon = "";
     if (OPENROUTER_API_KEY && articleText) {
       const systemPrompt = `Tu es le rédacteur météo en chef pour Météo-Climat Pro et Monsieur Météo (Patrick Marlière).
-À partir de l'article météo fourni, génère un script vidéo structuré en EXACTEMENT 5 SCÈNES calibrées pour une durée globale de 50 à 60 secondes, et identifie le phénomène météo principal.
+À partir de l'article météo fourni, génère un script vidéo structuré en EXACTEMENT ${numScenes} SCÈNES calibrées pour une durée globale de ${durationSec} SECONDES (soit un total d'environ ${totalWordsTarget} mots), et identifie le phénomène météo principal.
 
-RÈGLES IMPÉRATIVES :
-1. Scène 1 (Accroche) : STRICTEMENT <= 4 secondes de lecture (12 à 15 mots max). Ton d'alerte immédiat.
-2. Scène 2 (Synoptique) : Explication météo physique en altitude (goutte froide, anticyclone, dépression).
-3. Scène 3 (Chronologie / Radar) : Début et évolution du front dans le temps.
-4. Scène 4 (Intensité) : Intensité horaire, rafales ou lames d'eau.
-5. Scène 5 (Paroxysme & Signature) : Chiffres clés locaux (ex: 160 mm), départements touchés, appel à la vigilance et signature obligatoire: "...et restez connectés avec METEO CLIMAT PRO."
-6. Ne dis jamais "celsius" mais "degrés". Pas de mention "Météo-France", toujours "Météo-Climat Pro".
+RÈGLES IMPÉRATIVES DE CALIBRAGE :
+1. Scène 1 (Accroche percutante) : STRICTEMENT <= 4 secondes de lecture (12 à 15 mots max). Ton d'alerte immédiat.
+2. Scènes 2 à ${numScenes - 1} : Chaque scène doit comporter environ ${wordsPerLaterScene} mots avec des détails techniques et pédagogiques fluides :
+   - Analyse synoptique d'altitude (gouttes froides, anticyclones, anomalies, flux).
+   - Chronologie exacte du front ou de l'épisode météo.
+   - Chiffres de modélisation (lames d'eau horaires, cumuls totaux en mm, rafales en km/h).
+   - Départements et bassins versants exposés.
+3. Scène ${numScenes} (Paroxysme & Signature) : Environ ${wordsPerLaterScene} mots résumant le pic du phénomène, les consignes de vigilance et la signature obligatoire finale : "...et restez connectés avec METEO CLIMAT PRO."
+4. Vocabulaire : Ne dis jamais "celsius" mais "degrés". Pas de mention "Météo-France", utilise toujours "Météo-Climat Pro" ou "nos modélisations haute résolution".
 
 Format JSON STRICT :
 {
-  "phenomenon": "Nom synthétique du phénomène (ex: Épisode méditerranéen / Cévenol, Tempête, Canicule, Orages violents, Sécheresse, Feux de forêt, Cyclone, etc.)",
+  "phenomenon": "Nom synthétique du phénomène (ex: Épisode méditerranéen / Cévenol, Tempête, Canicule, Orages violents, Sécheresse, etc.)",
   "scenes": [
     {
       "scene_number": 1,
@@ -120,9 +231,9 @@ Format JSON STRICT :
       "sub": "SOUS-TITRE COURT",
       "location_tag": "SUD-EST",
       "ticker": "Bandeau défilant court",
-      "script_text": "Texte court"
+      "script_text": "Accroche percutante"
     },
-    ... (5 scènes)
+    ... (${numScenes} scènes au total)
   ]
 }`;
 
@@ -138,7 +249,7 @@ Format JSON STRICT :
           model: "google/gemini-2.5-flash",
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: `Titre : ${title}\n\nContenu de l'article :\n${articleText}` }
+            { role: "user", content: `Titre : ${title}\n\nContenu de l'article :\n${articleText}\n\nDurée vidéo ciblée : ${durationSec} secondes (environ ${totalWordsTarget} mots pour ${numScenes} scènes).` }
           ],
           temperature: 0.3,
           response_format: { type: "json_object" }
@@ -153,21 +264,26 @@ Format JSON STRICT :
       }
     }
 
-    // Répartir les images trouvées sur les 5 scènes
-    const allImages = [coverImage, ...contentImages];
-    const finalScenes = generatedScenes.map((sc, i) => ({
-      ...sc,
-      file_url: allImages[i] || allImages[allImages.length - 1] || "",
-      file_name: allImages[i] ? `Carte_${i + 1}` : ""
-    }));
+    // Répartition et recyclage des images (redémarrage en boucle à la première si pas assez d'images)
+    const availableImages = [coverImage, ...contentImages].filter(Boolean);
+    const pool = availableImages.length > 0 ? availableImages : DEFAULT_FALLBACK_IMAGES;
+
+    const finalScenes = generatedScenes.map((sc, i) => {
+      const chosenUrl = pool[i % pool.length];
+      return {
+        ...sc,
+        file_url: chosenUrl,
+        file_name: `Carte_${(i % pool.length) + 1}`
+      };
+    });
 
     return NextResponse.json({
       success: true,
       title,
       phenomenon: detectedPhenomenon,
-      cover_image: coverImage,
-      content_images: contentImages,
-      scenes: finalScenes.length === 5 ? finalScenes : null
+      cover_image: coverImage || pool[0],
+      content_images: contentImages.length > 0 ? contentImages : pool.slice(1),
+      scenes: finalScenes.length >= 2 ? finalScenes : null
     });
 
   } catch (error: any) {

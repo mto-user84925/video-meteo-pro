@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon, Terminal, Plus, Trash2 } from "lucide-react";
+import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon, Terminal, Plus, Trash2, Clock } from "lucide-react";
 
 interface LogEntry {
   id: string;
@@ -103,6 +103,13 @@ const PHENOMENONS = [
   "Gel tardif / Risque agrométéo"
 ];
 
+const DURATION_OPTIONS = [
+  { value: 45, label: "⚡ Express (~40-45s)" },
+  { value: 60, label: "⏱️ Standard (~55-60s • Recommandé)" },
+  { value: 90, label: "📊 Approfondi (~85-90s)" },
+  { value: 120, label: "📺 Grand Format (~110-120s)" }
+];
+
 export default function StudioMeteoPage() {
   const [articleUrl, setArticleUrl] = useState("");
   const [importingArticle, setImportingArticle] = useState(false);
@@ -116,6 +123,7 @@ export default function StudioMeteoPage() {
     ? customPhenomenon.trim()
     : phenomenon;
 
+  const [targetDuration, setTargetDuration] = useState<number>(60);
   const [topic, setTopic] = useState("Arrivée d'un épisode méditerranéen majeur dans le Sud-Est");
   const [notes, setNotes] = useState("Pic d'intensité mardi et mercredi, pointes > 160 mm sur Cévennes, Gard, Hérault, Rhône.");
   const [scenes, setScenes] = useState<Scene[]>(DEFAULT_SCENES);
@@ -153,7 +161,11 @@ export default function StudioMeteoPage() {
       const res = await fetch("/api/import-article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: targetUrl.trim() })
+        body: JSON.stringify({
+          url: targetUrl.trim(),
+          target_duration: targetDuration,
+          scene_count: scenes.length
+        })
       });
 
       if (!res.ok) {
@@ -174,19 +186,22 @@ export default function StudioMeteoPage() {
         }
       }
 
-      if (data.scenes && Array.isArray(data.scenes) && data.scenes.length === 5) {
+      if (data.scenes && Array.isArray(data.scenes) && data.scenes.length >= 2) {
         setScenes(data.scenes);
-        setImportSuccessMessage("🎉 Article importé avec succès : les 5 cartes et le script complet ont été automatiquement injectés !");
+        setImportSuccessMessage(`🎉 Article importé : les ${data.scenes.length} scènes, cartes haute résolution et le script calibré sur ${targetDuration}s sont prêts !`);
       } else {
-        // Fallback si scènes partielles : on injecte les images
+        // Fallback avec recyclage circulaire des images disponibles
         const allImgs = [data.cover_image, ...(data.content_images || [])].filter(Boolean);
-        const updated = scenes.map((sc, i) => ({
-          ...sc,
-          file_url: allImgs[i] || sc.file_url || "",
-          file_name: allImgs[i] ? `Carte_${i + 1}` : sc.file_name || ""
-        }));
+        const updated = scenes.map((sc, i) => {
+          const chosenUrl = allImgs.length > 0 ? allImgs[i % allImgs.length] : sc.file_url || "";
+          return {
+            ...sc,
+            file_url: chosenUrl,
+            file_name: allImgs.length > 0 ? `Carte_${(i % allImgs.length) + 1}` : sc.file_name || ""
+          };
+        });
         setScenes(updated);
-        setImportSuccessMessage("✅ Cartes extraites avec succès depuis l'article !");
+        setImportSuccessMessage("✅ Cartes extraites et mirorées avec succès depuis l'article !");
       }
     } catch (e: any) {
       alert(e.message || "Erreur lors de l'import de l'article.");
@@ -202,14 +217,20 @@ export default function StudioMeteoPage() {
       const res = await fetch("/api/generate-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phenomenon: effectivePhenomenon, topic, notes })
+        body: JSON.stringify({
+          phenomenon: effectivePhenomenon,
+          topic,
+          notes,
+          target_duration: targetDuration,
+          scene_count: scenes.length
+        })
       });
       const data = await res.json();
       if (data.scenes && Array.isArray(data.scenes)) {
         const merged = data.scenes.map((newSc: any, i: number) => ({
           ...newSc,
-          file_url: scenes[i]?.file_url || "",
-          file_name: scenes[i]?.file_name || ""
+          file_url: scenes[i]?.file_url || (scenes.length > 0 ? scenes[i % scenes.length]?.file_url : "") || "",
+          file_name: scenes[i]?.file_name || `Carte_${i + 1}`
         }));
         setScenes(merged);
       }
@@ -510,7 +531,7 @@ export default function StudioMeteoPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Type de phénomène</label>
@@ -553,6 +574,25 @@ export default function StudioMeteoPage() {
                 </div>
               )}
             </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-sky-400" /> Durée de la vidéo
+              </label>
+              <select
+                value={targetDuration}
+                onChange={e => setTargetDuration(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-sky-300 font-bold focus:outline-none focus:border-sky-500"
+              >
+                {DURATION_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1">
+                Calibre automatiquement le volume de texte et le débit de la voix off.
+              </p>
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Titre de l'alerte</label>
               <input
@@ -570,7 +610,9 @@ export default function StudioMeteoPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <span>🖼️ Les Scènes du Bulletin ({scenes.length} scènes configurées)</span>
+                <span>
+                  🖼️ Les Scènes du Bulletin ({scenes.length} scènes • ~{Math.round(scenes.reduce((acc, s) => acc + s.script_text.trim().split(/\s+/).filter(Boolean).length, 0) / 2.9)}s / Cible {targetDuration}s)
+                </span>
               </h2>
               <span className="text-xs text-slate-400">Ajoutez, supprimez ou personnalisez chaque scène, carte et voix off à volonté.</span>
             </div>

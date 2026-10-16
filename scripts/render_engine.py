@@ -47,7 +47,14 @@ def get_font(name_pref, size):
 
 def download_file(url, out_path):
     print(f"📥 Téléchargement : {url} -> {out_path}")
-    urllib.request.urlretrieve(url, out_path)
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        }
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp, open(out_path, "wb") as f:
+        f.write(resp.read())
 
 def upload_supabase(local_file, remote_path, content_type="video/mp4"):
     url = f"{SUPABASE_URL}/storage/v1/object/blog-images/{remote_path}"
