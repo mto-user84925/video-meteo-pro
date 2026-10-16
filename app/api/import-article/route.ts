@@ -95,9 +95,10 @@ export async function POST(req: Request) {
 
     // 3. Appel OpenRouter Gemini Flash pour générer les 5 scènes avec le contenu exact extrait
     let generatedScenes: any[] = [];
+    let detectedPhenomenon = "";
     if (OPENROUTER_API_KEY && articleText) {
       const systemPrompt = `Tu es le rédacteur météo en chef pour Météo-Climat Pro et Monsieur Météo (Patrick Marlière).
-À partir de l'article météo fourni, génère un script vidéo structuré en EXACTEMENT 5 SCÈNES calibrées pour une durée globale de 50 à 60 secondes.
+À partir de l'article météo fourni, génère un script vidéo structuré en EXACTEMENT 5 SCÈNES calibrées pour une durée globale de 50 à 60 secondes, et identifie le phénomène météo principal.
 
 RÈGLES IMPÉRATIVES :
 1. Scène 1 (Accroche) : STRICTEMENT <= 4 secondes de lecture (12 à 15 mots max). Ton d'alerte immédiat.
@@ -109,6 +110,7 @@ RÈGLES IMPÉRATIVES :
 
 Format JSON STRICT :
 {
+  "phenomenon": "Nom synthétique du phénomène (ex: Épisode méditerranéen / Cévenol, Tempête, Canicule, Orages violents, Sécheresse, Feux de forêt, Cyclone, etc.)",
   "scenes": [
     {
       "scene_number": 1,
@@ -147,6 +149,7 @@ Format JSON STRICT :
         const aiData = await aiRes.json();
         const parsed = JSON.parse(aiData.choices?.[0]?.message?.content || "{}");
         generatedScenes = parsed.scenes || [];
+        detectedPhenomenon = parsed.phenomenon || "";
       }
     }
 
@@ -161,6 +164,7 @@ Format JSON STRICT :
     return NextResponse.json({
       success: true,
       title,
+      phenomenon: detectedPhenomenon,
       cover_image: coverImage,
       content_images: contentImages,
       scenes: finalScenes.length === 5 ? finalScenes : null

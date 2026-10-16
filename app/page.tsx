@@ -76,7 +76,14 @@ const PHENOMENONS = [
   "Orages violents / Grêle",
   "Neige / Verglas / Grand froid",
   "Inondations / Crues majeures",
-  "Point Météo Hebdomadaire 7 jours"
+  "Point Météo Hebdomadaire 7 jours",
+  "Sécheresse / Risque feux de forêt",
+  "Cyclone / Tempête tropicale",
+  "Poussières du Sahara / Qualité de l'air",
+  "Tornade / Rafales descendantes",
+  "Vagues-submersion / Grandes marées",
+  "Brouillard givrant / Inversion thermique",
+  "Gel tardif / Risque agrométéo"
 ];
 
 export default function StudioMeteoPage() {
@@ -85,6 +92,13 @@ export default function StudioMeteoPage() {
   const [importSuccessMessage, setImportSuccessMessage] = useState("");
 
   const [phenomenon, setPhenomenon] = useState(PHENOMENONS[0]);
+  const [customPhenomenon, setCustomPhenomenon] = useState("");
+  const [isCustomPhenomenon, setIsCustomPhenomenon] = useState(false);
+
+  const effectivePhenomenon = (isCustomPhenomenon && customPhenomenon.trim())
+    ? customPhenomenon.trim()
+    : phenomenon;
+
   const [topic, setTopic] = useState("Arrivée d'un épisode méditerranéen majeur dans le Sud-Est");
   const [notes, setNotes] = useState("Pic d'intensité mardi et mercredi, pointes > 160 mm sur Cévennes, Gard, Hérault, Rhône.");
   const [scenes, setScenes] = useState<Scene[]>(DEFAULT_SCENES);
@@ -121,6 +135,17 @@ export default function StudioMeteoPage() {
       const data = await res.json();
       if (data.title) setTopic(data.title);
 
+      if (data.phenomenon) {
+        const found = PHENOMENONS.find(p => p.toLowerCase().includes(data.phenomenon.toLowerCase()) || data.phenomenon.toLowerCase().includes(p.toLowerCase()));
+        if (found) {
+          setPhenomenon(found);
+          setIsCustomPhenomenon(false);
+        } else {
+          setIsCustomPhenomenon(true);
+          setCustomPhenomenon(data.phenomenon);
+        }
+      }
+
       if (data.scenes && Array.isArray(data.scenes) && data.scenes.length === 5) {
         setScenes(data.scenes);
         setImportSuccessMessage("🎉 Article importé avec succès : les 5 cartes et le script complet ont été automatiquement injectés !");
@@ -149,7 +174,7 @@ export default function StudioMeteoPage() {
       const res = await fetch("/api/generate-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phenomenon, topic, notes })
+        body: JSON.stringify({ phenomenon: effectivePhenomenon, topic, notes })
       });
       const data = await res.json();
       if (data.scenes && Array.isArray(data.scenes)) {
@@ -219,7 +244,7 @@ export default function StudioMeteoPage() {
         session_id: sId,
         job: {
           session_id: sId,
-          phenomenon,
+          phenomenon: effectivePhenomenon,
           topic,
           scenes: scenes.map(s => ({
             badge: s.badge,
@@ -378,14 +403,46 @@ export default function StudioMeteoPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Type de phénomène</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Type de phénomène</label>
+                {isCustomPhenomenon && (
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
+                    Saisie libre
+                  </span>
+                )}
+              </div>
               <select
-                value={phenomenon}
-                onChange={e => setPhenomenon(e.target.value)}
+                value={isCustomPhenomenon ? "OTHER_CUSTOM" : phenomenon}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === "OTHER_CUSTOM") {
+                    setIsCustomPhenomenon(true);
+                  } else {
+                    setIsCustomPhenomenon(false);
+                    setPhenomenon(val);
+                  }
+                }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
               >
                 {PHENOMENONS.map(p => <option key={p} value={p}>{p}</option>)}
+                <option value="OTHER_CUSTOM">➕ Autre phénomène (saisie libre...)</option>
               </select>
+
+              {isCustomPhenomenon && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    placeholder="Tapez le phénomène (ex: Incendie de forêt, Sable saharien, Gel...)"
+                    value={customPhenomenon}
+                    onChange={e => setCustomPhenomenon(e.target.value)}
+                    className="w-full bg-slate-950 border border-amber-500/60 rounded-xl px-3 py-2 text-xs text-amber-300 placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    L'IA adaptera le vocabulaire météo sur-mesure pour ce phénomène.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="md:col-span-2">
               <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Titre de l'alerte</label>
