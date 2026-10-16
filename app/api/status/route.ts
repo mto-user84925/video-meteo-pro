@@ -53,7 +53,12 @@ export async function GET(req: Request) {
       }
     } catch (_) {}
 
-    return NextResponse.json({ status: "processing", step: "Régie vidéo en cours d'encodage..." });
+    let progress = null;
+    try {
+      const pr = await fetch(`${SUPABASE_URL}/storage/v1/object/public/blog-images/renders/${sessionId}/progress.json?t=${Date.now()}`, { cache: "no-store" });
+      if (pr.ok) progress = await pr.json();
+    } catch (_) {}
+    return NextResponse.json({ status: "processing", step: progress?.text || "Régie vidéo en cours d'encodage...", progress });
   } catch (error: any) {
     return NextResponse.json({ status: "processing", step: "En cours d'encodage..." });
   }

@@ -389,36 +389,39 @@ export async function POST(req: Request) {
     // Télécharge en parallèle les meilleures cartes pour garantir 0% CORS / 0% blocage
     // ========================================================================
     const validUrls = cleanCandidateUrls(rawImageCandidates, cleanUrl);
-    const toMirror = validUrls.slice(0, 6);
+    const toMirror = validUrls.slice(0, 14);
 
-    const mirrorResults = await Promise.all(
-      toMirror.map(async (candidate) => {
-        if (candidate.includes("supabase.co/storage")) return candidate;
+    const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+    // Télécharge l'image (direct, puis via proxy images.weserv.nl si le CDN bloque les IP cloud) et la miroite sur Supabase
+    const mirrorOne = async (candidate: string): Promise<string | null> => {
+      if (candidate.includes("supabase.co/storage")) return candidate;
+      const sources = [
+        candidate,
+        `https://images.weserv.nl/?url=${encodeURIComponent(candidate)}&output=jpg&w=1920`
+      ];
+      for (const src of sources) {
         try {
-          const imgRes = await fetch(candidate, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-              "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
-            },
+          const imgRes = await fetch(src, {
+            headers: { "User-Agent": UA, "Referer": cleanUrl, "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" },
             signal: AbortSignal.timeout(8000)
           });
-          if (imgRes.ok) {
-            const buf = await imgRes.arrayBuffer();
-            if (buf.byteLength >= 4000) {
-              const cType = imgRes.headers.get("content-type") || "image/jpeg";
-              const ext = cType.includes("png") ? "png" : cType.includes("gif") ? "gif" : "jpg";
-              const supaUrl = await uploadToSupabase(buf, cType, ext);
-              if (supaUrl) return supaUrl;
-            }
-          }
+          if (!imgRes.ok) continue;
+          const cType = imgRes.headers.get("content-type") || "";
+          if (!cType.startsWith("image/")) continue;
+          const buf = await imgRes.arrayBuffer();
+          if (buf.byteLength < 15000) continue; // ignore icônes / pixels
+          const ext = cType.includes("png") ? "png" : cType.includes("gif") ? "gif" : "jpg";
+          const supaUrl = await uploadToSupabase(buf, cType, ext);
+          if (supaUrl) return supaUrl;
         } catch {
-          // Échec silencieux pour cette image individuelle
+          // essai suivant
         }
-        return candidate;
-      })
-    );
+      }
+      return null; // ponytail: jamais d'URL hotlink brute, le renderer (IP datacenter) se ferait bloquer en 403
+    };
 
-    const cleanMirrored = mirrorResults.filter(Boolean) as string[];
+    const mirrorResults = await Promise.all(toMirror.map(mirrorOne));
+    const cleanMirrored = (mirrorResults.filter(Boolean) as string[]).slice(0, 8);
 
     // ========================================================================
     // CASCADE NIVEAU 3 : MÉTHODE C - SUBSTITUTION THÉMATIQUE PERTINENTE

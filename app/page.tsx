@@ -334,23 +334,7 @@ export default function StudioMeteoPage() {
       { id: "init_1", time: getNowStr(), text: "🚀 Démarrage du job de rendu et envoi à la régie cloud...", type: "info" }
     ]);
 
-    const voiceMilestones = scenes.map((sc, idx) => ({
-      sec: 4 + idx * 5,
-      text: `🎙️ Scène ${idx + 1} : Synthèse vocale Gemini 3.8 Flash TTS (Voix Charon${idx === 0 ? " - Accroche ≤ 4s" : ""})...`,
-      type: "voice" as const,
-      pct: Math.min(68, 20 + Math.round((idx / scenes.length) * 48))
-    }));
 
-    const endOffset = 4 + scenes.length * 5;
-    const plannedMilestones = [
-      { sec: 2, text: `📥 Téléchargement des ${scenes.length} cartes & visuels haute résolution...`, type: "info" as const, pct: 15 },
-      ...voiceMilestones,
-      { sec: endOffset + 3, text: "🎵 Concaténation audio et normalisation Broadcast (-14.5 LUFS)...", type: "audio" as const, pct: 75 },
-      { sec: endOffset + 8, text: "📱 Encodage vidéo TikTok 9:16 (1080x1920) avec overlays et dynamic blur...", type: "video" as const, pct: 85 },
-      { sec: endOffset + 14, text: "🖥️ Encodage vidéo Paysage 16:9 (1920x1080) avec incrustation direct TV...", type: "video" as const, pct: 92 },
-      { sec: endOffset + 20, text: "🛡️ Freeze-frame padding (garantie anti-écran noir) & mixage musical (-26 dB)...", type: "audio" as const, pct: 96 },
-      { sec: endOffset + 26, text: "☁️ Téléversement haute vitesse sur Supabase Cloud Storage...", type: "info" as const, pct: 98 },
-    ];
 
     try {
       const payload = {
@@ -381,19 +365,9 @@ export default function StudioMeteoPage() {
       if (!res.ok) throw new Error("Erreur de dispatch");
 
       // 1. Timer régulier pour les logs et l'horloge
-      const addedMilestones = new Set<number>();
+      let lastProgressTs = 0;
       const timerInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setElapsedSeconds(elapsed);
-
-        plannedMilestones.forEach(m => {
-          if (elapsed >= m.sec && !addedMilestones.has(m.sec)) {
-            addedMilestones.add(m.sec);
-            setLogs(prev => [...prev, { id: `${m.sec}_${Date.now()}`, time: getNowStr(), text: m.text, type: m.type as any }]);
-            setProgressPercent(m.pct);
-            setProgressStep(m.text);
-          }
-        });
+        setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
       }, 1000);
 
       // 2. Polling de statut toutes les 2.5 secondes
@@ -416,6 +390,11 @@ export default function StudioMeteoPage() {
               setResultLandscape(stData.landscape_url);
               setRendering(false);
               setProgressStep("Rendu terminé avec succès !");
+            } else if (stData.progress && stData.progress.ts !== lastProgressTs) {
+              lastProgressTs = stData.progress.ts;
+              setLogs(prev => [...prev, { id: `p_${stData.progress.ts}`, time: getNowStr(), text: stData.progress.text, type: (stData.progress.type || "info") as any }]);
+              setProgressPercent(stData.progress.pct);
+              setProgressStep(stData.progress.text);
             }
           }
         } catch (err) {

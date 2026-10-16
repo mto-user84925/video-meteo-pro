@@ -116,6 +116,21 @@ def upload_supabase(local_file, remote_path, content_type="video/mp4"):
 
     return f"{SUPABASE_URL}/storage/v1/object/public/blog-images/{remote_path}"
 
+def progress(session_id, pct, text, kind="info"):
+    """Publie l'avancement réel (lu par /api/status puis affiché dans le journal)."""
+    print(f"[{pct}%] {text}")
+    try:
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/storage/v1/object/blog-images/renders/{session_id}/progress.json",
+            data=json.dumps({"pct": pct, "text": text, "type": kind, "ts": int(time.time())}).encode("utf-8"),
+            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                     "Content-Type": "application/json", "x-upsert": "true"},
+            method="POST"
+        )
+        urllib.request.urlopen(req, timeout=15).read()
+    except Exception as e:
+        print(f"⚠️ progress non publié : {e}")
+
 def tts_charon(text, out_wav):
     url = "https://openrouter.ai/api/v1/audio/speech"
     payload = {
@@ -124,24 +139,33 @@ def tts_charon(text, out_wav):
         "voice": "Charon",
         "language": "fr-FR",
         "instructions": (
-            "Voix de présentateur météo professionnel expert pour journal télévisé et réseaux sociaux. "
-            "Prononciation impeccable en français standard parisien, diction fluide, naturelle et enchaînée, "
-            "sans aucune pause artificielle ni blanc entre les phrases. Rythme dynamique, chaleureux et direct. "
+            "Voix de présentateur météo professionnel expert pour journal télévisé. "
+            "Débit posé, modéré et parfaitement intelligible (environ 150 mots par minute), jamais précipité. "
+            "Prononciation impeccable en français standard, diction fluide et naturelle, intonation continue d'un seul tenant, "
+            "avec de courtes respirations naturelles entre les phrases. Ton chaleureux et rassurant. "
             "Ne prononce jamais 'celsius', dis toujours 'degrés'."
         )
     }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://video-meteo-pro.vercel.app",
-            "X-Title": "Video Meteo Pro Engine"
-        }
-    )
-    with urllib.request.urlopen(req, timeout=90) as resp:
-        pcm = resp.read()
+    pcm = None
+    for attempt in range(2):
+        try:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://video-meteo-pro.vercel.app",
+                    "X-Title": "Video Meteo Pro Engine"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=240) as resp:
+                pcm = resp.read()
+            break
+        except Exception as e:
+            print(f"⚠️ TTS tentative {attempt+1} échouée : {e}")
+            if attempt == 1:
+                raise
 
     with wave.open(out_wav, "wb") as wf:
         wf.setnchannels(1)
@@ -173,7 +197,24 @@ def render(job_file):
     font_ls_title = get_font("arialbd", 34)
     font_ls_ticker = get_font("segoeuib", 24)
 
-    audio_segments = []
+    # Voix off : UNE SEULE piste continue (intonation fluide), puis durée de chaque scène au prorata du texte
+    progress(session_id, 10, "🎙️ Synthèse vocale Charon (piste unique)...", "voice")
+    raw_wav = os.path.join(work_dir, "voice_raw.wav")
+    master_clean = os.path.join(work_dir, "voice_clean.wav")
+    tts_charon(" ".join(s["script_text"].strip() for s in scenes_data), raw_wav)
+    subprocess.run([
+        "ffmpeg", "-y", "-i", raw_wav,
+        "-af", "silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.04,areverse,silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.08,areverse",
+        "-ar", "48000", "-ac", "2", master_clean
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    voice_dur = float(subprocess.check_output([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", master_clean
+    ]).decode().strip())
+    weights = [max(1, len(s["script_text"].strip())) for s in scenes_data]
+    scene_durs = [voice_dur * w / sum(weights) for w in weights]
+    print(f"🎙️ Voix off unique : {voice_dur:.1f}s ({sum(len(s['script_text'].split()) for s in scenes_data)} mots)")
+    progress(session_id, 18, f"✅ Voix off prête ({voice_dur:.0f}s) - téléchargement des visuels...", "voice")
 
     for idx, sc_in in enumerate(scenes_data):
         sc_id = f"scene{idx+1}"
@@ -188,40 +229,8 @@ def render(job_file):
 
         is_gif = local_file.lower().endswith(".gif")
         
-        # Audio TTS pour cette scène
-        raw_wav = os.path.join(work_dir, f"{sc_id}_raw.wav")
-        clean_wav = os.path.join(work_dir, f"{sc_id}_clean.wav")
-        print(f"🎙️ [Scène {idx+1}] Génération voix off Charon : \"{sc_in['script_text'][:40]}...\"")
-        tts_charon(sc_in["script_text"], raw_wav)
-
-        # Trimming uniquement des silences de début et de fin (sans couper les respirations internes)
-        subprocess.run([
-            "ffmpeg", "-y", "-i", raw_wav,
-            "-af", "silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.04,areverse,silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.08,areverse",
-            "-ar", "48000", "-ac", "2",
-            clean_wav
-        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-        dur = float(subprocess.check_output([
-            "ffprobe", "-v", "error", "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1", clean_wav
-        ]).decode().strip())
-        print(f"   ⏱️ Durée Scène {idx+1} : {dur:.2f}s")
-
-        # Contrainte stricte pour la scène 1 (Accroche <= 4.0s)
-        if idx == 0 and dur > 4.0:
-            speed_ratio = min(dur / 3.9, 1.35)
-            speed_wav = os.path.join(work_dir, f"{sc_id}_speed.wav")
-            subprocess.run([
-                "ffmpeg", "-y", "-i", clean_wav,
-                "-af", f"atempo={speed_ratio:.3f}",
-                speed_wav
-            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            clean_wav = speed_wav
-            dur = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", clean_wav]).decode().strip())
-            print(f"   ⚡ Scène 1 ajustée à : {dur:.2f}s")
-
-        audio_segments.append(clean_wav)
+        dur = scene_durs[idx]
+        progress(session_id, 20 + int(25 * (idx + 1) / len(scenes_data)), f"🖼️ Scène {idx+1}/{len(scenes_data)} préparée ({dur:.1f}s)", "info")
 
         # Création des overlays graphiques
         badge_color = tuple(sc_in.get("badge_color", [220, 30, 30]))
@@ -284,14 +293,9 @@ def render(job_file):
         })
         t_cursor += dur
 
-    # Concaténation de l'audio total
-    audio_concat_txt = os.path.join(work_dir, "audio_concat.txt")
-    with open(audio_concat_txt, "w", encoding="utf-8") as f:
-        for a in audio_segments:
-            f.write(f"file '{a.replace(os.sep, '/')}'\n")
-
-    raw_master_wav = os.path.join(work_dir, "master_raw.wav")
-    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", audio_concat_txt, "-c", "copy", raw_master_wav], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Piste voix off unique (déjà générée d'un seul tenant)
+    raw_master_wav = master_clean
+    progress(session_id, 72, "🎵 Normalisation audio Broadcast (-14.5 LUFS)...", "audio")
 
     master_norm_wav = os.path.join(work_dir, "master_norm.wav")
     subprocess.run([
@@ -305,6 +309,7 @@ def render(job_file):
     print(f"🎙️ Piste voix off complète : {total_speech_dur:.2f}s")
 
     # 2. Encodage TikTok (9:16)
+    progress(session_id, 76, "📱 Encodage vidéo TikTok 9:16...", "video")
     rendered_tk = []
     for idx, sc in enumerate(scenes):
         clip_path = os.path.join(work_dir, f"tk_{sc['id']}.mp4")
@@ -354,6 +359,7 @@ def render(job_file):
     subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_tk_txt, "-c", "copy", v_tk_only], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # 3. Encodage Paysage (16:9)
+    progress(session_id, 86, "🖥️ Encodage vidéo Paysage 16:9...", "video")
     rendered_ls = []
     for idx, sc in enumerate(scenes):
         clip_path = os.path.join(work_dir, f"ls_{sc['id']}.mp4")
@@ -397,6 +403,7 @@ def render(job_file):
     subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_ls_txt, "-c", "copy", v_ls_only], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # 4. Muxing avec calage temporel anti-écran noir
+    progress(session_id, 93, "🛡️ Mixage voix + musique et contrôle qualité...", "audio")
     TARGET_DUR = round(total_speech_dur - 0.13, 2)
     output_tk = os.path.join(work_dir, "bulletin_tiktok.mp4")
     output_ls = os.path.join(work_dir, "bulletin_paysage.mp4")
@@ -433,6 +440,7 @@ def render(job_file):
     print(f"✅ Rendu terminé sans aucune image noire !")
 
     # 5. Téléversement Supabase Storage
+    progress(session_id, 97, "☁️ Téléversement sur Supabase Cloud Storage...", "info")
     tk_url = upload_supabase(output_tk, f"renders/{session_id}/bulletin_tiktok.mp4")
     ls_url = upload_supabase(output_ls, f"renders/{session_id}/bulletin_paysage.mp4")
 
