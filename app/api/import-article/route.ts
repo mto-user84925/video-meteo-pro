@@ -377,14 +377,26 @@ export async function POST(req: Request) {
               }
             }
 
-            // Récupération complémentaire dans le contenu : chaque token commençant par http
-            const tokens = (jData.content || "").split(/[\s"'<>\[\]]+/);
-            for (let tok of tokens) {
-              const hIdx = tok.indexOf("http");
-              if (hIdx === -1) continue;
-              tok = tok.slice(hIdx).replace(/\)+$/, "");
-              if (/\.(?:jpe?g|png|webp|gif|avif)(?:\?|$)/i.test(tok)) {
-                rawImageCandidates.push(tok);
+            // Récupération dans le markdown avec équilibrage des parenthèses (gère filters:quality(80) suivi de )Texte)
+            const contentStr = jData.content || "";
+            const httpRe = /https?:\/\//gi;
+            let hm;
+            while ((hm = httpRe.exec(contentStr)) !== null) {
+              let depth = 0;
+              let endIdx = hm.index;
+              while (endIdx < contentStr.length) {
+                const ch = contentStr[endIdx];
+                if (/[\s"'<>\[\]]/.test(ch)) break;
+                if (ch === "(") depth++;
+                else if (ch === ")") {
+                  if (depth > 0) depth--;
+                  else break;
+                }
+                endIdx++;
+              }
+              const candidateUrl = contentStr.slice(hm.index, endIdx);
+              if (/\.(?:jpe?g|png|webp|gif|avif)(?:\?|$)/i.test(candidateUrl)) {
+                rawImageCandidates.push(candidateUrl);
               }
             }
           }
