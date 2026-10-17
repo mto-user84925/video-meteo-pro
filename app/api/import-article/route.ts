@@ -106,9 +106,10 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
   const bannedKeywords = [
     "logo", "icon", "avatar", "favicon", "pixel", "spinner", "badge",
     "ad-", "ads-", "banner", "sponsor", "author", "share", "facebook",
-    "twitter", "instagram", "didomi", "cookie", "tracker", "spacer"
+    "twitter", "instagram", "didomi", "cookie", "tracker", "spacer",
+    "/menu/", "bckg_", "newsroom", "google-play", "apple-store", "/flags/"
   ];
-  const weatherWhitelist = ["carte", "radar", "meteo", "vigilance", "cumul", "modele", "satellite", "prevision", "aifs", "ecmwf", "arome", "gfs", "arpege"];
+  const weatherWhitelist = ["carte", "radar", "meteo", "vigilance", "cumul", "modele", "satellite", "prevision", "aifs", "ecmwf", "arome", "gfs", "arpege", "reporter"];
 
   for (let raw of rawCandidates) {
     if (!raw || typeof raw !== "string") continue;
@@ -133,8 +134,10 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
     const low = resolved.toLowerCase();
     if (low.endsWith(".svg") || resolved === baseUrl) continue;
     if ((low.match(/\(/g) || []).length !== (low.match(/\)/g) || []).length) continue; // URL tronquée
-    const crop = low.match(/\/crop\/(\d+)x(\d+)\//);
-    if (crop && Number(crop[1]) < 400) continue; // vignettes d'articles liés
+
+    // Écarter toute miniature ou bannière UI dont les dimensions WxH dans l'URL sont < 400x200
+    const dimMatches = [...low.matchAll(/(\d{2,4})x(\d{2,4})/g)];
+    if (dimMatches.some(m => Number(m[1]) < 400 || Number(m[2]) < 200)) continue;
 
     const hasBanned = bannedKeywords.some(b => low.includes(b));
     const isWhitelisted = weatherWhitelist.some(w => low.includes(w));
@@ -149,6 +152,16 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
   return validUrls;
 }
 
+function parseJsonSafe(raw: string): any {
+  const cleaned = (raw || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    return JSON.parse(cleaned.slice(start, end + 1));
+  }
+  return JSON.parse(cleaned);
+}
+
 export async function POST(req: Request) {
   try {
     const { url, target_duration = 60, scene_count = 5 } = await req.json();
@@ -159,7 +172,7 @@ export async function POST(req: Request) {
     const cleanUrl = url.trim();
     const durationSec = Number(target_duration) || 60;
     const numScenes = Math.max(2, Math.min(10, Number(scene_count) || 5));
-    const totalWordsTarget = Math.round(durationSec * 2.9);
+    const totalWordsTarget = Math.round(durationSec * 2.5);
     const wordsPerLaterScene = Math.round((totalWordsTarget - 14) / (numScenes - 1));
 
     let title = "";
@@ -217,7 +230,6 @@ export async function POST(req: Request) {
 
     // ========================================================================
     // CASCADE NIVEAU 1 : MÉTHODE A - SCRAPING DIRECT AVEC PARSING EXHAUSTIF
-    // (JSON-LD schema.org, balises Meta, Picture, Img srcset, Article text)
     // ========================================================================
     let directFetchOk = false;
     if (!title || rawImageCandidates.length === 0) {
@@ -229,7 +241,7 @@ export async function POST(req: Request) {
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
             "Cache-Control": "no-cache"
           },
-          signal: AbortSignal.timeout(8000)
+          signal: AbortSignal.timeout(6000)
         });
 
         if (pageRes.ok) {
@@ -243,7 +255,6 @@ export async function POST(req: Request) {
             directFetchOk = true;
             methodUsed = "direct_scraping";
 
-            // 1. Extraction JSON-LD (schema.org/NewsArticle, Article, BlogPosting)
             const jsonLdMatches = html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
             for (const jm of jsonLdMatches) {
               try {
@@ -267,12 +278,9 @@ export async function POST(req: Request) {
                     }
                   }
                 }
-              } catch {
-                // Ignore JSON-LD parse errors
-              }
+              } catch {}
             }
 
-            // 2. Balises Titre
             if (!title) {
               const ogTitleMatch = html.match(/<meta\s+[^>]*(?:property|name)=["'](?:og:title|twitter:title)["'][^>]*content=["']([^"']+)["']/i) ||
                                    html.match(/<meta\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["'](?:og:title|twitter:title)["']/i);
@@ -284,7 +292,6 @@ export async function POST(req: Request) {
               else if (titleTagMatch) title = titleTagMatch[1].replace(/<[^>]+>/g, "").trim();
             }
 
-            // 3. Balises Meta Images
             const metaImgMatches = [
               ...html.matchAll(/<meta\s+[^>]*(?:property|name)=["'](?:og:image|twitter:image)["'][^>]*content=["']([^"']+)["']/gi),
               ...html.matchAll(/<meta\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["'](?:og:image|twitter:image)["']/gi)
@@ -293,7 +300,6 @@ export async function POST(req: Request) {
               if (m[1]) rawImageCandidates.push(m[1]);
             }
 
-            // 4. Balises <img> et <picture><source>
             const imgRegex = /<img\b([^>]+)>/gi;
             let imgM;
             while ((imgM = imgRegex.exec(html)) !== null) {
@@ -308,7 +314,6 @@ export async function POST(req: Request) {
               }
             }
 
-            // 5. Extraction du texte de l'article si pas extrait via JSON-LD
             if (!articleText || articleText.length < 150) {
               const textClean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
                                     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
@@ -330,13 +335,11 @@ export async function POST(req: Request) {
 
     // ========================================================================
     // CASCADE NIVEAU 2 : MÉTHODE B - PROXY UNIVERSEL JINA READER (FALLBACK)
-    // Contourne Cloudflare, exécute le JavaScript et renvoie le Markdown pur
-    // Activé si la requête directe a échoué (403, anti-bot, page vide ou < 2 images)
     // ========================================================================
     const needJinaFallback = !directFetchOk ||
                              !title ||
                              articleText.length < 120 ||
-                             rawImageCandidates.length < 2;
+                             cleanCandidateUrls(rawImageCandidates, cleanUrl).length < 2;
 
     if (needJinaFallback && !isOurNetwork) {
       try {
@@ -346,7 +349,6 @@ export async function POST(req: Request) {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept": "application/json",
             "X-With-Images-Summary": "true",
-            "X-Return-Format": "markdown",
             "X-No-Cache": "true"
           },
           signal: AbortSignal.timeout(12000)
@@ -366,19 +368,25 @@ export async function POST(req: Request) {
               articleText = (jData.content || "").slice(0, 4500);
             }
 
-            // Récupération des images via le dictionnaire de synthèse d'images Jina
+            // Récupération des images complètes via le dictionnaire Jina (non tronqué sans X-Return-Format)
             if (jData.images && typeof jData.images === "object") {
-              for (const [caption, imgUrl] of Object.entries(jData.images)) {
+              for (const imgUrl of Object.values(jData.images)) {
                 if (typeof imgUrl === "string") {
                   rawImageCandidates.push(imgUrl);
                 }
               }
             }
 
-            // Récupération complémentaire : URLs d'images complètes (même avec parenthèses type filters:quality(80))
-            const fullImgUrls = (jData.content || "").match(/https?:\/\/[^\s"'<>\]]+?\.(?:jpe?g|png|webp|gif|avif)(?:\?[^\s"'<>\])]*)?/gi) || [];
-            for (const fu of fullImgUrls) rawImageCandidates.push(fu);
-
+            // Récupération complémentaire dans le contenu : chaque token commençant par http
+            const tokens = (jData.content || "").split(/[\s"'<>\[\]]+/);
+            for (let tok of tokens) {
+              const hIdx = tok.indexOf("http");
+              if (hIdx === -1) continue;
+              tok = tok.slice(hIdx).replace(/\)+$/, "");
+              if (/\.(?:jpe?g|png|webp|gif|avif)(?:\?|$)/i.test(tok)) {
+                rawImageCandidates.push(tok);
+              }
+            }
           }
         }
       } catch (jinaErr) {
@@ -386,15 +394,18 @@ export async function POST(req: Request) {
       }
     }
 
+    if (!articleText && title) {
+      articleText = title;
+    }
+
     // ========================================================================
-    // FILTRAGE ET TÉLÉVERSEMENT MIROIR VERS SUPABASE STORAGE (blog-images)
-    // Télécharge en parallèle les meilleures cartes pour garantir 0% CORS / 0% blocage
+    // EXÉCUTION EN PARALLÈLE : MIROIR IMAGES SUPABASE + GÉNÉRATION SCRIPT IA
+    // (Divise le temps d'attente par 2 et évite tout timeout)
     // ========================================================================
     const validUrls = cleanCandidateUrls(rawImageCandidates, cleanUrl);
-    const toMirror = validUrls.slice(0, 14);
-
+    const toMirror = validUrls.slice(0, 8);
     const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-    // Télécharge l'image (direct, puis via proxy images.weserv.nl si le CDN bloque les IP cloud) et la miroite sur Supabase
+
     const mirrorOne = async (candidate: string): Promise<string | null> => {
       if (candidate.includes("supabase.co/storage")) return candidate;
       const sources = [
@@ -405,57 +416,23 @@ export async function POST(req: Request) {
         try {
           const imgRes = await fetch(src, {
             headers: { "User-Agent": UA, "Referer": cleanUrl, "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" },
-            signal: AbortSignal.timeout(8000)
+            signal: AbortSignal.timeout(4500)
           });
           if (!imgRes.ok) continue;
           const cType = imgRes.headers.get("content-type") || "";
           if (!cType.startsWith("image/")) continue;
           const buf = await imgRes.arrayBuffer();
-          if (buf.byteLength < 15000) continue; // ignore icônes / pixels
+          if (buf.byteLength < 15000) continue;
           const ext = cType.includes("png") ? "png" : cType.includes("gif") ? "gif" : "jpg";
           const supaUrl = await uploadToSupabase(buf, cType, ext);
           if (supaUrl) return supaUrl;
-        } catch {
-          // essai suivant
-        }
+        } catch {}
       }
-      return candidate; // ponytail: miroir impossible ici (CDN bloque Vercel) ; render_engine retente avec empreinte Chrome puis carte de secours
+      return candidate; // conservée telle quelle : render_engine la téléchargera via empreinte Chrome
     };
 
-    const mirrorResults = await Promise.all(toMirror.map(mirrorOne));
-    const cleanMirrored = (mirrorResults.filter(Boolean) as string[]).slice(0, 8);
-
-    // ========================================================================
-    // CASCADE NIVEAU 3 : MÉTHODE C - SUBSTITUTION THÉMATIQUE PERTINENTE
-    // Si l'article comporte moins de 3 cartes réelles, compléter avec les cartes
-    // météo haute résolution adaptées au phénomène (pluie, tempête, orage, canicule...)
-    // ========================================================================
-    const thematicFallbackPool = getThematicFallbackImages(`${title} ${articleText}`);
-    const availablePool = [...cleanMirrored];
-
-    // Compléter jusqu'à au moins 5 visuels de haute qualité
-    for (const thematicImg of thematicFallbackPool) {
-      if (!availablePool.includes(thematicImg)) {
-        availablePool.push(thematicImg);
-      }
-      if (availablePool.length >= Math.max(5, numScenes)) break;
-    }
-
-    coverImage = availablePool[0];
-    contentImages = availablePool.slice(1);
-
-    if (!articleText && title) {
-      articleText = title;
-    }
-
-    // ========================================================================
-    // GÉNÉRATION INTELLIGENTE DU SCRIPT PAR IA (OPENROUTER GEMINI FLASH)
-    // Calibré à la seconde près selon la durée demandée (45s, 60s, 90s, 120s)
-    // ========================================================================
-    let generatedScenes: any[] = [];
-    let detectedPhenomenon = "";
-
-    if (OPENROUTER_API_KEY && articleText) {
+    const generateAiScript = async (): Promise<{ scenes: any[]; phenomenon: string }> => {
+      if (!OPENROUTER_API_KEY || !articleText) return { scenes: [], phenomenon: "" };
       const systemPrompt = `Tu es le rédacteur météo en chef pour Météo-Climat Pro et Monsieur Météo (Patrick Marlière).
 À partir de l'article météo fourni, génère un script vidéo structuré en EXACTEMENT ${numScenes} SCÈNES calibrées pour une durée globale de ${durationSec} SECONDES (soit un total d'environ ${totalWordsTarget} mots), et identifie le phénomène météo principal.
 
@@ -467,11 +444,16 @@ RÈGLES IMPÉRATIVES DE CALIBRAGE :
    - Chiffres de modélisation (lames d'eau horaires, cumuls totaux en mm, rafales en km/h, anomalies).
    - Départements et bassins versants exposés.
 3. Scène ${numScenes} (Paroxysme & Signature) : Environ ${wordsPerLaterScene} mots résumant le pic du phénomène, les consignes de vigilance et la signature obligatoire finale : "...et restez connectés avec METEO CLIMAT PRO."
-4. Vocabulaire : Ne dis jamais "celsius" mais "degrés". Pas de mention "Météo-France", utilise toujours "Météo-Climat Pro" ou "nos modélisations haute résolution".
+4. Cartouches courts (zéro débordement) :
+   - "badge" : <= 20 caractères (ex: "ALERTE MÉTÉO", "ANALYSE SYNOPTIQUE", "CHRONOLOGIE", "CUMULS & VENTS", "VIGILANCE").
+   - "location_tag" : <= 16 caractères (ex: "MOITIÉ NORD", "ATLANTIQUE NORD", "MANCHE / NORD", "SUD-EST", "FRANCE ENTIÈRE").
+   - "title" : <= 28 caractères.
+   - "sub" : <= 26 caractères.
+5. Vocabulaire : Ne dis jamais "celsius" mais "degrés". Pas de mention "Météo-France" ni du site source, utilise toujours "Météo-Climat Pro" ou "nos modélisations haute résolution".
 
 Format JSON STRICT :
 {
-  "phenomenon": "Nom synthétique du phénomène (ex: Épisode méditerranéen / Cévenol, Tempête, Canicule, Orages violents, Sécheresse, Neige / Verglas, etc.)",
+  "phenomenon": "Nom synthétique du phénomène",
   "scenes": [
     {
       "scene_number": 1,
@@ -479,11 +461,10 @@ Format JSON STRICT :
       "badge_color": [220, 30, 30],
       "title": "TITRE SCÈNE",
       "sub": "SOUS-TITRE COURT",
-      "location_tag": "SUD-EST",
+      "location_tag": "MOITIÉ NORD",
       "ticker": "Bandeau défilant court",
       "script_text": "Accroche percutante"
-    },
-    ... (${numScenes} scènes au total)
+    }
   ]
 }`;
 
@@ -505,21 +486,38 @@ Format JSON STRICT :
             temperature: 0.3,
             response_format: { type: "json_object" }
           }),
-          signal: AbortSignal.timeout(18000)
+          signal: AbortSignal.timeout(28000)
         });
 
         if (aiRes.ok) {
           const aiData = await aiRes.json();
-          const parsed = JSON.parse(aiData.choices?.[0]?.message?.content || "{}");
-          generatedScenes = parsed.scenes || [];
-          detectedPhenomenon = parsed.phenomenon || "";
+          const parsed = parseJsonSafe(aiData.choices?.[0]?.message?.content || "{}");
+          return { scenes: parsed.scenes || [], phenomenon: parsed.phenomenon || "" };
         }
       } catch (aiErr) {
         console.error("Erreur IA Gemini Flash:", aiErr);
       }
-    }
+      return { scenes: [], phenomenon: "" };
+    };
 
-    // Construction finale des scènes avec affectation harmonieuse des images disponibles
+    const [mirrorResults, aiResult] = await Promise.all([
+      Promise.all(toMirror.map(mirrorOne)),
+      generateAiScript()
+    ]);
+
+    const cleanMirrored = (mirrorResults.filter(Boolean) as string[]).slice(0, 8);
+    const generatedScenes = aiResult.scenes;
+    const detectedPhenomenon = aiResult.phenomenon;
+
+    // Si l'article possède au moins 1 vraie image, on boucle UNIQUEMENT sur les vraies images de l'article !
+    // On n'utilise le catalogue thématique de secours que si 0 image n'a pu être extraite.
+    const availablePool = cleanMirrored.length > 0
+      ? cleanMirrored
+      : getThematicFallbackImages(`${title} ${articleText}`);
+
+    coverImage = availablePool[0];
+    contentImages = availablePool.slice(1);
+
     const pool = availablePool.length > 0 ? availablePool : THEMATIC_WEATHER_MAPS.default;
 
     const baseScenes = (generatedScenes && generatedScenes.length >= 2)
@@ -528,13 +526,13 @@ Format JSON STRICT :
           scene_number: idx + 1,
           badge: idx === 0 ? "ALERTE MÉTÉO" : "ANALYSE MÉTÉO",
           badge_color: idx === 0 ? [220, 30, 30] : [30, 120, 240],
-          title: title || `SCÈNE ${idx + 1}`,
-          sub: "Prévisions et suivi météorologique • Météo-Climat Pro",
+          title: (title || `SCÈNE ${idx + 1}`).slice(0, 28).toUpperCase(),
+          sub: "PRÉVISIONS MÉTÉO-CLIMAT PRO",
           location_tag: "FRANCE",
-          ticker: "Suivi en direct • Modélisations haute résolution • Météo-Climat Pro",
+          ticker: title || "Suivi en direct • Modélisations haute résolution • Météo-Climat Pro",
           script_text: idx === 0
-            ? (title ? `Attention, ${title}.` : "Attention aux intempéries prévues dans les prochaines heures.")
-            : "Suivez attentivement l'évolution des conditions météorologiques et restez connectés avec METEO CLIMAT PRO."
+            ? (title ? `Attention ! ${title}.` : "Attention aux intempéries prévues dans les prochaines heures.")
+            : "Nos modélisations haute résolution confirment l'évolution rapide de la situation synoptique. Restez connectés avec METEO CLIMAT PRO."
         }));
 
     const finalScenes = baseScenes.map((sc, i) => {

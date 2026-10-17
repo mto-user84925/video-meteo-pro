@@ -320,11 +320,6 @@ export default function StudioMeteoPage() {
       return;
     }
 
-    const unmirrored = scenes.filter(s => !(s.file_url || "").includes("supabase.co/storage")).map(s => s.scene_number);
-    if (unmirrored.length > 0 && !confirm(`Les images des scènes ${unmirrored.join(", ")} viennent d'un site protégé : le serveur de rendu ne pourra pas les télécharger et utilisera une carte de secours à la place.\n\nAstuce : enregistrez l'image depuis votre navigateur et importez-la dans la scène (bouton d'envoi de fichier).\n\nLancer quand même le rendu ?`)) {
-      return;
-    }
-
     const sId = `session_${Date.now()}`;
     setSessionId(sId);
     setRendering(true);

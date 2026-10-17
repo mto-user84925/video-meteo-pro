@@ -74,8 +74,10 @@ Durée totale ciblée : ${durationSec} secondes (environ ${totalWordsTarget} mot
     }
 
     const data = await res.json();
-    const rawContent = data.choices?.[0]?.message?.content || "{}";
-    const parsed = JSON.parse(rawContent);
+    const rawContent = (data.choices?.[0]?.message?.content || "{}").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    const s = rawContent.indexOf("{");
+    const e = rawContent.lastIndexOf("}");
+    const parsed = JSON.parse(s !== -1 && e > s ? rawContent.slice(s, e + 1) : rawContent);
 
     return NextResponse.json(parsed);
   } catch (error: any) {
