@@ -6,77 +6,6 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "https://ubdevaemtwbzxksjlhjg.s
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 
-// ============================================================================
-// MÉTHODE C : CATALOGUE THÉMATIQUE DE SUBSTITUTION HAUTE RÉSOLUTION (SUPABASE)
-// Utilisé automatiquement si l'article externe ne comporte pas assez de cartes
-// ============================================================================
-const THEMATIC_WEATHER_MAPS: Record<string, string[]> = {
-  // 1. Épisode méditerranéen / Cévenol / Inondations / Pluies diluviennes
-  rain: [
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792153060_couverture_deluge_fortes_pluies_16_9.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152013_MeteoClimatPro_ECMWF_AIFS_0_25__Europe_geopotentiel-500-hpa_1792130672739.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152015_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151417749.gif",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152014_MeteoClimatPro_ECMWF_AIFS_0_25__France_pluie-periode_1792130457894.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152016_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151648872.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/auto_1788809628_00_COUVERTURE_PLUIE_16_9.png"
-  ],
-  // 2. Tempête / Coup de vent violent / Rafales
-  wind: [
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/auto_1788799092_00_COUVERTURE_BRETAGNE_PEAK_16_9.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/auto_1788802674_00_COUVERTURE_PACIFIQUE_RAFALES_16_9.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/auto_1788798213_00_COUVERTURE_16_9.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152013_MeteoClimatPro_ECMWF_AIFS_0_25__Europe_geopotentiel-500-hpa_1792130672739.png"
-  ],
-  // 3. Orages violents / Grêle / Foudre
-  storm: [
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/auto_1788795366_00_COUVERTURE_16_9.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/auto_1788802918_00_COUVERTURE_ORAGES_16_9.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152015_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151417749.gif",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152016_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151648872.png"
-  ],
-  // 4. Canicule / Vague de chaleur / Sécheresse
-  heat: [
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1788435712_MeteoClimatPro_GFS_0_25__France_temperature-maximale-tx-24h_1788435284929.jpg",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1788435438_MeteoClimatPro_ARPEGE_France_0_1__temperature-maximale-tx-24h_1788434956994.jpg",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1788206657_GFS_0_25_temperature_850_hpa_europe.gif",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1781571152471_cover.png"
-  ],
-  // 5. Neige / Verglas / Grand froid
-  snow: [
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152013_MeteoClimatPro_ECMWF_AIFS_0_25__Europe_geopotentiel-500-hpa_1792130672739.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1788438222_ChatGPT_Image_3_sept._2026__14_22_54.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/auto_1788810525_00_COUVERTURE_VIGILANCE_16_9.png"
-  ],
-  // 6. Tendance générale / Synoptique / Vigilance
-  default: [
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792153060_couverture_deluge_fortes_pluies_16_9.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152013_MeteoClimatPro_ECMWF_AIFS_0_25__Europe_geopotentiel-500-hpa_1792130672739.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152015_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151417749.gif",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152014_MeteoClimatPro_ECMWF_AIFS_0_25__France_pluie-periode_1792130457894.png",
-    "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152016_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151648872.png"
-  ]
-};
-
-function getThematicFallbackImages(contextText: string): string[] {
-  const low = contextText.toLowerCase();
-  if (low.includes("pluie") || low.includes("inond") || low.includes("crue") || low.includes("céven") || low.includes("ceven") || low.includes("méditerran") || low.includes("deluge")) {
-    return THEMATIC_WEATHER_MAPS.rain;
-  }
-  if (low.includes("vent") || low.includes("tempête") || low.includes("tempete") || low.includes("rafale") || low.includes("gale") || low.includes("cyclon") || low.includes("ouragan")) {
-    return THEMATIC_WEATHER_MAPS.wind;
-  }
-  if (low.includes("orage") || low.includes("foudre") || low.includes("grêle") || low.includes("grele") || low.includes("tornad")) {
-    return THEMATIC_WEATHER_MAPS.storm;
-  }
-  if (low.includes("canic") || low.includes("chaleur") || low.includes("fournaise") || low.includes("sécheresse") || low.includes("secheresse") || low.includes("soleil")) {
-    return THEMATIC_WEATHER_MAPS.heat;
-  }
-  if (low.includes("neige") || low.includes("verglas") || low.includes("froid") || low.includes("gel") || low.includes("hiver")) {
-    return THEMATIC_WEATHER_MAPS.snow;
-  }
-  return THEMATIC_WEATHER_MAPS.default;
-}
-
 // Téléversement d'une image distante vers Supabase Storage pour contourner CORS et blocages hotlinking
 async function uploadToSupabase(buffer: ArrayBuffer, contentType: string, ext = "jpg"): Promise<string | null> {
   const remotePath = `renders/imports/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -100,17 +29,19 @@ async function uploadToSupabase(buffer: ArrayBuffer, contentType: string, ext = 
   return null;
 }
 
-// Nettoyage et filtrage intelligent des URLs d'images candidates (avec dédoublonnage par nom de fichier)
+// Nettoyage et filtrage chirurgical des URLs d'images de l'article (zéro vignette "À lire aussi", zéro pub, zéro page d'erreur)
 function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] {
   const validUrls: string[] = [];
   const seenFileNames = new Map<string, number>(); // filename -> index in validUrls
-  const bannedKeywords = [
+
+  const hardBannedKeywords = [
     "logo", "icon", "avatar", "favicon", "pixel", "spinner", "badge",
     "ad-", "ads-", "banner", "sponsor", "author", "share", "facebook",
     "twitter", "instagram", "didomi", "cookie", "tracker", "spacer",
-    "/menu/", "bckg_", "newsroom", "google-play", "apple-store", "/flags/"
+    "/menu/", "bckg_", "newsroom", "google-play", "apple-store", "/flags/",
+    "autopromo", "bandeau_", "/vignette/", "brief_semaine", "bulletin_meteo",
+    "bulletin_temps", "/error/", "maintenance", "fond_ciel"
   ];
-  const weatherWhitelist = ["carte", "radar", "meteo", "vigilance", "cumul", "modele", "satellite", "prevision", "aifs", "ecmwf", "arome", "gfs", "arpege", "reporter"];
 
   const getPixelArea = (u: string): number => {
     const m = u.toLowerCase().match(/(\d{2,4})x(\d{2,4})/);
@@ -141,18 +72,15 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
     if (low.endsWith(".svg") || resolved === baseUrl) continue;
     if ((low.match(/\(/g) || []).length !== (low.match(/\)/g) || []).length) continue; // URL tronquée
 
-    // Écarter toute miniature ou bannière UI dont les dimensions WxH dans l'URL sont < 400x200
+    // Écarter toute vignette d'article lié ("À lire aussi" / "En continu" : 218x120, 285x160, 436x240, 570x320)
+    // Les vraies photos/cartes d'article font >= 600x300 (ex: 658x370, 1200x630, 1316x740, 2000x1126)
     const dimMatches = [...low.matchAll(/(\d{2,4})x(\d{2,4})/g)];
-    if (dimMatches.some(m => Number(m[1]) < 400 || Number(m[2]) < 200)) continue;
+    if (dimMatches.some(m => Number(m[1]) < 600 || Number(m[2]) < 300)) continue;
 
-    const hasBanned = bannedKeywords.some(b => low.includes(b));
-    const isWhitelisted = weatherWhitelist.some(w => low.includes(w));
-
-    if (hasBanned && !isWhitelisted) continue;
-
+    if (hardBannedKeywords.some(b => low.includes(b))) continue;
     if (validUrls.includes(resolved)) continue;
 
-    // Dédoublonnage par nom de fichier (ex: Thumbor sert la même photo en 658x370, 1200x630, 1316x740)
+    // Dédoublonnage par nom de fichier (ex: Thumbor sert la même photo en 658x370, 1200x630, 1316x740, 2000x1126)
     const baseFile = resolved.split("?")[0].split("/").pop()?.toLowerCase() || "";
     if (baseFile.length > 10 && /\.(?:jpe?g|png|webp|gif|avif)$/.test(baseFile)) {
       if (seenFileNames.has(baseFile)) {
@@ -319,30 +247,62 @@ export async function POST(req: Request) {
               if (m[1]) rawImageCandidates.push(m[1]);
             }
 
+            // Isoler strictement le corps de l'article (exclure header, nav, aside, footer, "À lire aussi", "Partager")
+            let articleHtml = html
+              .replace(/<header\b[\s\S]*?<\/header>/gi, "")
+              .replace(/<nav\b[\s\S]*?<\/nav>/gi, "")
+              .replace(/<aside\b[\s\S]*?<\/aside>/gi, "")
+              .replace(/<footer\b[\s\S]*?<\/footer>/gi, "");
+
+            const cutMarkers = [
+              /<div\b[^>]*class=["'][^"']*\b(?:share|readMore|related|outbrain|taboola)\b/i,
+              />\s*À lire aussi\s*</i,
+              />\s*Sur le même sujet\s*</i,
+              />\s*Articles recommandés\s*</i
+            ];
+            for (const marker of cutMarkers) {
+              const cm = articleHtml.match(marker);
+              if (cm && cm.index && cm.index > 500) {
+                articleHtml = articleHtml.slice(0, cm.index);
+              }
+            }
+
             const imgRegex = /<img\b([^>]+)>/gi;
             let imgM;
-            while ((imgM = imgRegex.exec(html)) !== null) {
+            while ((imgM = imgRegex.exec(articleHtml)) !== null) {
               const tag = imgM[1];
-              const attrMatch = tag.match(/(?:src|data-src|data-original|data-lazy-src|data-hi-res-src)=["']([^"']+)["']/i);
-              if (attrMatch) rawImageCandidates.push(attrMatch[1]);
 
-              const srcsetMatch = tag.match(/(?:srcset|data-srcset)=["']([^"']+)["']/i);
-              if (srcsetMatch) {
-                const parts = srcsetMatch[1].split(",").map(p => p.trim().split(/\s+/)[0]);
+              // Ignorer toute vignette dont l'attribut width HTML est < 450px ou height < 220px
+              const wMatch = tag.match(/\bwidth=["']?(\d+)["']?/i);
+              const hMatch = tag.match(/\bheight=["']?(\d+)["']?/i);
+              if ((wMatch && Number(wMatch[1]) < 450) || (hMatch && Number(hMatch[1]) < 220)) continue;
+              if (/weather-news-item-image|avatar|icon|flag|logo/i.test(tag)) continue;
+
+              // Priorité haute définition : data-lightbox-src > data-srcset/srcset > data-hi-res-src/data-src/src (non data:)
+              const lbMatch = tag.match(/data-lightbox-src=["']([^"']+)["']/i);
+              if (lbMatch && !lbMatch[1].startsWith("data:")) rawImageCandidates.push(lbMatch[1]);
+
+              const dataSrcsetMatch = tag.match(/data-srcset=["']([^"']+)["']/i) || tag.match(/\bsrcset=["']([^"']+)["']/i);
+              if (dataSrcsetMatch && dataSrcsetMatch[1].trim()) {
+                const parts = dataSrcsetMatch[1].split(",").map(p => p.trim().split(/\s+/)[0]).filter(Boolean);
                 if (parts.length > 0) rawImageCandidates.push(parts[parts.length - 1]);
+              }
+
+              for (const attr of ["data-hi-res-src", "data-original", "data-src", "data-lazy-src", "src"]) {
+                const m = tag.match(new RegExp(`\\b${attr}=["']([^"']+)["']`, "i"));
+                if (m && m[1] && !m[1].startsWith("data:")) {
+                  rawImageCandidates.push(m[1]);
+                }
               }
             }
 
             if (!articleText || articleText.length < 150) {
-              const textClean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-                                    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-                                    .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, "")
-                                    .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, "")
-                                    .replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, "")
-                                    .replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, "")
-                                    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, "")
-                                    .replace(/<[^>]+>/g, " ")
-                                    .replace(/\s+/g, " ");
+              const textClean = articleHtml
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+                .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+                .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, "")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/\s+/g, " ");
               articleText = textClean.slice(0, 4500);
             }
           }
@@ -354,11 +314,12 @@ export async function POST(req: Request) {
 
     // ========================================================================
     // CASCADE NIVEAU 2 : MÉTHODE B - PROXY UNIVERSEL JINA READER (FALLBACK)
+    // Uniquement si le scraping direct a échoué ou n'a trouvé aucune image
     // ========================================================================
     const needJinaFallback = !directFetchOk ||
                              !title ||
                              articleText.length < 120 ||
-                             cleanCandidateUrls(rawImageCandidates, cleanUrl).length < 2;
+                             cleanCandidateUrls(rawImageCandidates, cleanUrl).length === 0;
 
     if (needJinaFallback && !isOurNetwork) {
       try {
@@ -376,46 +337,58 @@ export async function POST(req: Request) {
         if (jinaRes.ok) {
           const jinaJson = await jinaRes.json();
           if (jinaJson && jinaJson.data) {
-            methodUsed = "jina_reader";
             const jData = jinaJson.data;
+            const jTitle = (jData.title || "").toString();
 
-            if (!title || title.length < 10) {
-              title = jData.title || title;
-            }
+            // Ignorer les pages d'erreur / maintenance / anti-bot renvoyées à Jina
+            const isJinaErrorPage = /turbulences|maintenance|just a moment|access denied|attention required/i.test(jTitle);
+            if (!isJinaErrorPage) {
+              methodUsed = "jina_reader";
 
-            if (!articleText || articleText.length < 150) {
-              articleText = (jData.content || "").slice(0, 4500);
-            }
+              if (!title || title.length < 10) {
+                title = jTitle || title;
+              }
 
-            // Récupération des images complètes via le dictionnaire Jina (non tronqué sans X-Return-Format)
-            if (jData.images && typeof jData.images === "object") {
-              for (const imgUrl of Object.values(jData.images)) {
-                if (typeof imgUrl === "string") {
-                  rawImageCandidates.push(imgUrl);
+              // Couper le Markdown Jina avant les blocs "Partager" / "À lire aussi" / "En continu"
+              let contentStr = (jData.content || "").toString();
+              const mdCutMarkers = [
+                /\nPartager\n/i,
+                /\nÀ lire aussi/i,
+                /\nSur le même sujet/i,
+                /\nArticles recommandés/i,
+                /\nPlus d'actualités/i
+              ];
+              for (const mm of mdCutMarkers) {
+                const match = contentStr.match(mm);
+                if (match && match.index && match.index > 200) {
+                  contentStr = contentStr.slice(0, match.index);
                 }
               }
-            }
 
-            // Récupération dans le markdown avec équilibrage des parenthèses (gère filters:quality(80) suivi de )Texte)
-            const contentStr = jData.content || "";
-            const httpRe = /https?:\/\//gi;
-            let hm;
-            while ((hm = httpRe.exec(contentStr)) !== null) {
-              let depth = 0;
-              let endIdx = hm.index;
-              while (endIdx < contentStr.length) {
-                const ch = contentStr[endIdx];
-                if (/[\s"'<>\[\]]/.test(ch)) break;
-                if (ch === "(") depth++;
-                else if (ch === ")") {
-                  if (depth > 0) depth--;
-                  else break;
-                }
-                endIdx++;
+              if (!articleText || articleText.length < 150) {
+                articleText = contentStr.slice(0, 4500);
               }
-              const candidateUrl = contentStr.slice(hm.index, endIdx);
-              if (/\.(?:jpe?g|png|webp|gif|avif)(?:\?|$)/i.test(candidateUrl)) {
-                rawImageCandidates.push(candidateUrl);
+
+              // Récupération dans le markdown de l'article uniquement (avec équilibrage des parenthèses)
+              const httpRe = /https?:\/\//gi;
+              let hm;
+              while ((hm = httpRe.exec(contentStr)) !== null) {
+                let depth = 0;
+                let endIdx = hm.index;
+                while (endIdx < contentStr.length) {
+                  const ch = contentStr[endIdx];
+                  if (/[\s"'<>\[\]]/.test(ch)) break;
+                  if (ch === "(") depth++;
+                  else if (ch === ")") {
+                    if (depth > 0) depth--;
+                    else break;
+                  }
+                  endIdx++;
+                }
+                const candidateUrl = contentStr.slice(hm.index, endIdx);
+                if (/\.(?:jpe?g|png|webp|gif|avif)(?:\?|$)/i.test(candidateUrl)) {
+                  rawImageCandidates.push(candidateUrl);
+                }
               }
             }
           }
@@ -540,16 +513,9 @@ Format JSON STRICT :
     const generatedScenes = aiResult.scenes;
     const detectedPhenomenon = aiResult.phenomenon;
 
-    // Si l'article possède au moins 1 vraie image, on boucle UNIQUEMENT sur les vraies images de l'article !
-    // On n'utilise le catalogue thématique de secours que si 0 image n'a pu être extraite.
-    const availablePool = cleanMirrored.length > 0
-      ? cleanMirrored
-      : getThematicFallbackImages(`${title} ${articleText}`);
-
-    coverImage = availablePool[0];
-    contentImages = availablePool.slice(1);
-
-    const pool = availablePool.length > 0 ? availablePool : THEMATIC_WEATHER_MAPS.default;
+    // AUCUNE image d'ancien bulletin injectée : uniquement les vraies images extraites de l'article
+    coverImage = cleanMirrored[0] || "";
+    contentImages = cleanMirrored.slice(1);
 
     const baseScenes = (generatedScenes && generatedScenes.length >= 2)
       ? generatedScenes
@@ -567,11 +533,11 @@ Format JSON STRICT :
         }));
 
     const finalScenes = baseScenes.map((sc, i) => {
-      const chosenUrl = pool[i % pool.length];
+      const chosenUrl = cleanMirrored.length > 0 ? cleanMirrored[i % cleanMirrored.length] : "";
       return {
         ...sc,
         file_url: chosenUrl,
-        file_name: `Carte_${(i % pool.length) + 1}`
+        file_name: chosenUrl ? `Carte_${(i % cleanMirrored.length) + 1}` : ""
       };
     });
 
@@ -580,9 +546,9 @@ Format JSON STRICT :
         success: true,
         method_used: methodUsed,
         title: title || "Actualité Météo",
-        phenomenon: detectedPhenomenon || "Épisode méditerranéen / Cévenol",
-        cover_image: coverImage || pool[0],
-        content_images: contentImages.length > 0 ? contentImages : pool.slice(1),
+        phenomenon: detectedPhenomenon || "",
+        cover_image: coverImage,
+        content_images: contentImages,
         mirrored_count: cleanMirrored.length,
         scenes: finalScenes
       },
