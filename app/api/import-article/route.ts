@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
-export const dynamic = "force-dynamic";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://ubdevaemtwbzxksjlhjg.supabase.co";
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
