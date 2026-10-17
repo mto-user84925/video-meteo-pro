@@ -637,9 +637,9 @@ export default function StudioMeteoPage() {
                           alt={`Scène ${i + 1}`}
                           onError={(e) => {
                             const target = e.currentTarget as HTMLImageElement;
-                            if (!target.dataset.fallback) {
+                            if (!target.dataset.fallback && sc.file_url) {
                               target.dataset.fallback = "true";
-                              target.src = DEFAULT_SCENES[i % DEFAULT_SCENES.length]?.file_url || "";
+                              target.src = `https://images.weserv.nl/?url=${encodeURIComponent(sc.file_url)}&output=jpg&w=800`;
                             }
                           }}
                           className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
