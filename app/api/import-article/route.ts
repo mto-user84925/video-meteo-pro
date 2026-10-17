@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://ubdevaemtwbzxksjlhjg.supabase.co";
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
@@ -100,9 +101,10 @@ async function uploadToSupabase(buffer: ArrayBuffer, contentType: string, ext = 
   return null;
 }
 
-// Nettoyage et filtrage intelligent des URLs d'images candidates
+// Nettoyage et filtrage intelligent des URLs d'images candidates (avec dédoublonnage par nom de fichier)
 function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] {
   const validUrls: string[] = [];
+  const seenFileNames = new Map<string, number>(); // filename -> index in validUrls
   const bannedKeywords = [
     "logo", "icon", "avatar", "favicon", "pixel", "spinner", "badge",
     "ad-", "ads-", "banner", "sponsor", "author", "share", "facebook",
@@ -110,6 +112,11 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
     "/menu/", "bckg_", "newsroom", "google-play", "apple-store", "/flags/"
   ];
   const weatherWhitelist = ["carte", "radar", "meteo", "vigilance", "cumul", "modele", "satellite", "prevision", "aifs", "ecmwf", "arome", "gfs", "arpege", "reporter"];
+
+  const getPixelArea = (u: string): number => {
+    const m = u.toLowerCase().match(/(\d{2,4})x(\d{2,4})/);
+    return m ? Number(m[1]) * Number(m[2]) : 0;
+  };
 
   for (let raw of rawCandidates) {
     if (!raw || typeof raw !== "string") continue;
@@ -144,9 +151,22 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
 
     if (hasBanned && !isWhitelisted) continue;
 
-    if (!validUrls.includes(resolved)) {
-      validUrls.push(resolved);
+    if (validUrls.includes(resolved)) continue;
+
+    // Dédoublonnage par nom de fichier (ex: Thumbor sert la même photo en 658x370, 1200x630, 1316x740)
+    const baseFile = resolved.split("?")[0].split("/").pop()?.toLowerCase() || "";
+    if (baseFile.length > 10 && /\.(?:jpe?g|png|webp|gif|avif)$/.test(baseFile)) {
+      if (seenFileNames.has(baseFile)) {
+        const existingIdx = seenFileNames.get(baseFile)!;
+        if (getPixelArea(resolved) > getPixelArea(validUrls[existingIdx])) {
+          validUrls[existingIdx] = resolved; // Garder la version la plus haute définition
+        }
+        continue;
+      }
+      seenFileNames.set(baseFile, validUrls.length);
     }
+
+    validUrls.push(resolved);
   }
 
   return validUrls;
@@ -556,16 +576,25 @@ Format JSON STRICT :
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      method_used: methodUsed,
-      title: title || "Actualité Météo",
-      phenomenon: detectedPhenomenon || "Épisode méditerranéen / Cévenol",
-      cover_image: coverImage || pool[0],
-      content_images: contentImages.length > 0 ? contentImages : pool.slice(1),
-      mirrored_count: cleanMirrored.length,
-      scenes: finalScenes
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        method_used: methodUsed,
+        title: title || "Actualité Météo",
+        phenomenon: detectedPhenomenon || "Épisode méditerranéen / Cévenol",
+        cover_image: coverImage || pool[0],
+        content_images: contentImages.length > 0 ? contentImages : pool.slice(1),
+        mirrored_count: cleanMirrored.length,
+        scenes: finalScenes
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0"
+        }
+      }
+    );
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Erreur d'importation de l'article" }, { status: 500 });

@@ -23,68 +23,31 @@ interface Scene {
   file_name?: string;
 }
 
-const DEFAULT_SCENES: Scene[] = [
-  {
-    scene_number: 1,
-    badge: "ALERTE MÉTÉO",
-    badge_color: [220, 30, 30],
-    title: "ÉPISODE MÉDITERRANÉEN",
-    sub: "De très fortes pluies attendues dans le Sud-Est",
-    location_tag: "SUD-EST",
-    ticker: "Alerte fortes pluies • Cévennes, Languedoc, Provence • Météo-Climat Pro",
-    script_text: "Attention, un épisode méditerranéen marqué va frapper le Sud-Est de la France.",
-    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792153060_couverture_deluge_fortes_pluies_16_9.png",
-    file_name: "Photo_Déluge_Sud_Est.png"
-  },
-  {
-    scene_number: 2,
-    badge: "ANALYSE SYNOPTIQUE",
-    badge_color: [30, 120, 240],
-    title: "GOUTTE FROIDE IBÉRIQUE",
-    sub: "Remontée d'air très doux et saturé en humidité",
-    location_tag: "EUROPE",
-    ticker: "Dépression d'altitude bloquée au sud-ouest • Flux de sud très dynamique",
-    script_text: "En altitude, une vaste goutte froide plonge vers la péninsule Ibérique et fait remonter un flux de sud très dynamique et chargé d'humidité méditerranéenne.",
-    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152013_MeteoClimatPro_ECMWF_AIFS_0_25__Europe_geopotentiel-500-hpa_1792130672739.png",
-    file_name: "Geopotentiel_Europe.png"
-  },
-  {
-    scene_number: 3,
-    badge: "CHRONOLOGIE DU FRONT",
-    badge_color: [230, 80, 20],
-    title: "DÉBUT DES INTEMPÉRIES",
-    sub: "Dimanche en Provence, extension lundi en Languedoc",
-    location_tag: "SUD-EST",
-    ticker: "Premières pluies dimanche 18 • Intensification lundi 19 sur le golfe du Lion",
-    script_text: "Les pluies orageuses vont rapidement s'intensifier et se bloquer durablement contre le relief.",
-    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152015_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151417749.gif",
-    file_name: "Radar_Precipitations.gif"
-  },
-  {
-    scene_number: 4,
-    badge: "INTENSITÉ HORAIRE",
-    badge_color: [20, 150, 60],
-    title: "LAMES D'EAU INTENSES",
-    sub: "Pluies orageuses et saturation rapide des sols",
-    location_tag: "SUD-EST",
-    ticker: "Modélisation ECMWF AIFS 0.25° • Lames d'eau horaires soutenues • Risque ruissellement",
-    script_text: "Les lames d'eau horaires s'annoncent particulièrement intenses, saturant rapidement les sols déjà humides.",
-    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152014_MeteoClimatPro_ECMWF_AIFS_0_25__France_pluie-periode_1792130457894.png",
-    file_name: "Cumuls_Pluie_France.png"
-  },
-  {
-    scene_number: 5,
-    badge: "PAROXYSME MARDI & MERCREDI",
-    badge_color: [220, 30, 30],
-    title: "POUVANT DÉPASSER 160 MM",
-    sub: "Crues éclairs pendant les vacances scolaires • Météo-Climat Pro",
-    location_tag: "SUD-EST",
-    ticker: "Cévennes, Gard, Hérault, Rhône • Risque inondations vacances scolaires • Météo-Climat Pro",
-    script_text: "Regardez ce zoom sur le quart Sud-Est : le pic d'intensité est attendu entre mardi et mercredi, avec des pointes locales pouvant dépasser 160 millimètres sur les Cévennes, le Gard, l'Hérault et la vallée du Rhône, provoquant un risque majeur d'inondations et de crues éclairs, pendant les vacances scolaires Soyez très vigilants dans vos déplacements, et restez connectés avec METEO CLIMAT PRO.",
-    file_url: "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/blog/1792152016_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151648872.png",
-    file_name: "Carte_Sud_Est_160mm.png"
-  }
+const BADGE_PRESETS = [
+  { badge: "ALERTE MÉTÉO", color: [220, 30, 30] },
+  { badge: "ANALYSE SYNOPTIQUE", color: [30, 120, 240] },
+  { badge: "CHRONOLOGIE", color: [230, 80, 20] },
+  { badge: "CUMULS & IMPACTS", color: [20, 150, 60] },
+  { badge: "VIGILANCE & CONSEILS", color: [220, 30, 30] }
 ];
+
+function createEmptyScenes(count = 5): Scene[] {
+  return Array.from({ length: count }, (_, i) => {
+    const preset = BADGE_PRESETS[i % BADGE_PRESETS.length];
+    return {
+      scene_number: i + 1,
+      badge: preset.badge,
+      badge_color: [...preset.color],
+      title: "",
+      sub: "",
+      location_tag: "",
+      ticker: "",
+      script_text: "",
+      file_url: "",
+      file_name: ""
+    };
+  });
+}
 
 const PHENOMENONS = [
   "Épisode méditerranéen / Cévenol",
@@ -124,9 +87,9 @@ export default function StudioMeteoPage() {
     : phenomenon;
 
   const [targetDuration, setTargetDuration] = useState<number>(60);
-  const [topic, setTopic] = useState("Arrivée d'un épisode méditerranéen majeur dans le Sud-Est");
-  const [notes, setNotes] = useState("Pic d'intensité mardi et mercredi, pointes > 160 mm sur Cévennes, Gard, Hérault, Rhône.");
-  const [scenes, setScenes] = useState<Scene[]>(DEFAULT_SCENES);
+  const [topic, setTopic] = useState("");
+  const [notes, setNotes] = useState("");
+  const [scenes, setScenes] = useState<Scene[]>(() => createEmptyScenes(5));
 
   const [generatingScript, setGeneratingScript] = useState(false);
   const [rendering, setRendering] = useState(false);
@@ -140,6 +103,26 @@ export default function StudioMeteoPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
   const logsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Vider tout cache navigateur éventuel à chaque ouverture du studio
+  useEffect(() => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {}
+  }, []);
+
+  const handleResetAll = () => {
+    setArticleUrl("");
+    setTopic("");
+    setNotes("");
+    setImportSuccessMessage("");
+    setScenes(createEmptyScenes(5));
+    setResultTiktok(null);
+    setResultLandscape(null);
+    setLogs([]);
+    setSessionId(null);
+  };
 
   useEffect(() => {
     if (logsContainerRef.current) {
@@ -155,16 +138,25 @@ export default function StudioMeteoPage() {
       return;
     }
 
+    const currentCount = scenes.length;
     setImportingArticle(true);
     setImportSuccessMessage("");
+    // On vide immédiatement les anciennes scènes et images avant l'import
+    setScenes(createEmptyScenes(currentCount));
+    setTopic("");
+    setNotes("");
+    setResultTiktok(null);
+    setResultLandscape(null);
+
     try {
-      const res = await fetch("/api/import-article", {
+      const res = await fetch(`/api/import-article?t=${Date.now()}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
         body: JSON.stringify({
           url: targetUrl.trim(),
           target_duration: targetDuration,
-          scene_count: scenes.length
+          scene_count: currentCount
         })
       });
 
@@ -188,26 +180,23 @@ export default function StudioMeteoPage() {
 
       if (data.scenes && Array.isArray(data.scenes) && data.scenes.length >= 2) {
         setScenes(data.scenes);
-        setResultTiktok(null);
-        setResultLandscape(null);
         const methodLabel = data.method_used === "supabase_direct"
           ? "Réseau Interne Supabase"
           : (data.method_used === "jina_reader" ? "Proxy IA Universel (Bypass Anti-Bot)" : "Scraping HD Direct");
-        const countInfo = data.mirrored_count ? ` (${data.mirrored_count} cartes météo stockées sur Supabase)` : "";
+        const countInfo = data.mirrored_count ? ` (${data.mirrored_count} carte(s) extraite(s))` : "";
         setImportSuccessMessage(`🎉 Article importé via ${methodLabel} : les ${data.scenes.length} scènes${countInfo} et le script calibré sur ${targetDuration}s sont prêts !`);
       } else {
-        // Fallback avec recyclage circulaire des images disponibles
         const allImgs = [data.cover_image, ...(data.content_images || [])].filter(Boolean);
-        const updated = scenes.map((sc, i) => {
-          const chosenUrl = allImgs.length > 0 ? allImgs[i % allImgs.length] : sc.file_url || "";
+        const updated = createEmptyScenes(currentCount).map((sc, i) => {
+          const chosenUrl = allImgs.length > 0 ? allImgs[i % allImgs.length] : "";
           return {
             ...sc,
             file_url: chosenUrl,
-            file_name: allImgs.length > 0 ? `Carte_${(i % allImgs.length) + 1}` : sc.file_name || ""
+            file_name: allImgs.length > 0 ? `Carte_${(i % allImgs.length) + 1}` : ""
           };
         });
         setScenes(updated);
-        setImportSuccessMessage("✅ Cartes extraites et synchronisées avec succès sur Supabase Storage !");
+        setImportSuccessMessage("✅ Cartes extraites avec succès !");
       }
     } catch (e: any) {
       alert(e.message || "Erreur lors de l'import de l'article.");
@@ -439,6 +428,14 @@ export default function StudioMeteoPage() {
               Collez simplement le lien d'un article météo : les <strong>cartes</strong>, le <strong>script</strong> et les <strong>vidéos TikTok & Paysage</strong> sont générés automatiquement.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleResetAll}
+            className="self-start md:self-center px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-950/80 text-slate-200 hover:text-rose-200 border border-slate-700 hover:border-rose-500/40 text-xs font-bold flex items-center gap-2 transition shadow-lg shrink-0"
+            title="Vider le cache et remettre toutes les scènes à zéro"
+          >
+            <Trash2 className="w-4 h-4 text-rose-400" /> Vider / Nouveau bulletin
+          </button>
         </header>
 
         {/* 🌟 ACTION PRINCIPALE : IMPORTATION EN 1 CLIC DEPUIS UN LIEN D'ARTICLE WEB */}
