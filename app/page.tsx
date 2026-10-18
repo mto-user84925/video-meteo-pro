@@ -50,7 +50,61 @@ function getBadgeColor(badgeText: string, sceneIndex: number): number[] {
   return [...BADGE_PRESETS[sceneIndex % BADGE_PRESETS.length].color];
 }
 
-const LAST_USER_PROMPT_SAMPLE = `SCÈNE 1
+const LAST_USER_PROMPT_SAMPLE = `=== DEBUT ARTICLE ===
+TITRE SEO : Météo : retour de la pluie et d'un coup de vent dès ce mercredi sur la moitié nord de la France
+
+CHAPEAU : Après plusieurs semaines d'accalmie anticyclonique et de sécheresse persistante, un net changement de temps s'amorce dès ce mercredi 21 octobre. Le rail océanique dépressionnaire reprend ses droits avec pluies soutenues et risque de coup de vent vendredi.
+
+CATEGORIE : Vigilance & Intempéries
+
+# RETOUR DE LA PLUIE ET DU VENT
+# NETTE DÉGRADATION OCÉANIQUE DÈS MERCREDI SUR LA MOITIÉ NORD
+
+Après plusieurs semaines dominées par un puissant anticyclone de blocage, la situation météorologique s'apprête à basculer radicalement sur l'Europe occidentale. Dès ce mercredi 21 octobre, les perturbations océaniques vont s'engouffrer sur la France, marquant la fin brutale de la période calme et sèche sur la moitié nord.
+
+**Une rupture synoptique majeure orchestrée par l'Atlantique**
+En altitude, un vaste creux dépressionnaire atlantique se rapproche des îles Britanniques et repousse l'anticyclone vers les Açores. Ce décrochage permet au courant d'ouest de reprendre progressivement sa place, ouvrant un véritable couloir perturbé actif jusqu'au week-end.
+
+[IMAGE 1]
+
+**🌧️ CHRONOLOGIE DES INTEMPÉRIES**
+## Les perturbations vont balayer la France d'ouest en est
+*Période : Du mercredi 21 au vendredi 23 octobre*
+- **Mercredi 21 : Arrivée des premières pluies sur la Bretagne et la Normandie (15 à 30 mm)**
+- **Jeudi 22 : Progression des averses vers le Bassin parisien et les Hauts-de-France**
+- **Vendredi 23 : Risque d'un coup de vent soutenu le long des côtes de la Manche**
+- **Cumuls globaux : 30 à 60 mm attendus sur les reliefs et littoraux exposés**
+
+[IMAGE 2]
+
+**💨 RISQUE DE COUP DE VENT : LES ZONES SOUS SURVEILLANCE**
+Les modélisations numériques haute résolution de Météo-Climat Pro surveillent particulièrement la journée de vendredi. Un resserrement isobarique marqué pourrait provoquer des rafales de 80 à 90 km/h dans les terres et jusqu'à 100 à 110 km/h sur les caps exposés de la Manche et du Finistère.
+
+[IMAGE 3]
+
+| Zone géographique | Risque principal | Cumuls de pluie prévus | Rafales maximales modélisées |
+| :--- | :--- | :--- | :--- |
+| **Bretagne & Cotentin** | Pluie forte & vent | 30 à 50 mm | 90 à 105 km/h |
+| **Hauts-de-France** | Pluie soutenue | 20 à 40 mm | 80 à 95 km/h |
+| **Bassin Parisien** | Pluies régulières | 15 à 25 mm | 65 à 80 km/h |
+| **Sud de la France** | Temps plus calme | 0 à 10 mm | Moins de 50 km/h |
+
+**⚠️ Conséquences et précautions pour les chantiers et déplacements :**
+Ces précipitations abondantes constituent une excellente nouvelle pour recharger les sols superficiels, mais appellent à la vigilance sur le réseau routier et pour les chantiers du BTP (arrimage des bâches et échafaudages, interruption des travaux de levage sous fortes rafales).
+
+**FAQ MÉTÉO EXPRESS**
+**1. Quand débutera l'épisode pluvieux ?**
+Dès mercredi matin par la pointe bretonne, avant de traverser le pays d'ouest en est au fil des heures.
+
+**2. Le coup de vent est-il une tempête ?**
+Non, il s'agit pour l'heure d'un coup de vent automnal classique mais dynamique, à affiner selon la trajectoire exacte du centre dépressionnaire.
+
+**En résumé**
+Le calme automnal prend fin ce mercredi avec le retour du rail dépressionnaire atlantique. Pluies régulières et rafales de vent marqueront la seconde partie de semaine sur la moitié nord, apportant une hydratation bienvenue tout en nécessitant une prudence le long de la Manche.
+
+=== FIN ARTICLE ===
+
+SCÈNE 1
 - Image à utiliser : Image 1 — ECMWF AIFS, précipitations cumulées
 - Badge : CHANGEMENT MÉTÉO
 - Titre : PLUIE ET VENT REVIENNENT
@@ -58,6 +112,7 @@ const LAST_USER_PROMPT_SAMPLE = `SCÈNE 1
 - Localisation : MOITIÉ NORD
 - Bandeau Infos Météo : Dès le 21 octobre, retour des perturbations par l’ouest.
 - Voix off Charon : Attention, pluie et vent reviennent dès mercredi au nord !
+
 SCÈNE 2
 - Image à utiliser : Image 2 — ECMWF IFS, rafales maximales cumulées
 - Badge : ANALYSE SYNOPTIQUE
@@ -66,6 +121,7 @@ SCÈNE 2
 - Localisation : ATLANTIQUE NORD
 - Bandeau Infos Météo : Le 21 octobre, le flux atlantique reprend vers la France.
 - Voix off Charon : En altitude, un vaste creux dépressionnaire atlantique se rapproche des îles Britanniques. L’anticyclone recule vers les Açores, tandis que le courant d’ouest reprend progressivement sa place, ouvrant le passage aux perturbations sur le nord.
+
 SCÈNE 3
 - Image à utiliser : Image 3 — GFS, géopotentiel à 500 hPa
 - Badge : CHRONOLOGIE
@@ -74,6 +130,7 @@ SCÈNE 3
 - Localisation : OUEST PUIS NORD
 - Bandeau Infos Météo : Du 21 au 23 octobre, les pluies progressent vers l’intérieur.
 - Voix off Charon : Mercredi vingt et un octobre, les premières pluies gagnent la Bretagne, la Normandie et les Pays de la Loire. Jeudi puis vendredi, elles progressent vers le Bassin parisien et le Centre, accompagnées de vent.
+
 SCÈNE 4
 - Image à utiliser : Image 1 — ECMWF AIFS, précipitations cumulées
 - Badge : VENTS & IMPACTS
@@ -82,6 +139,7 @@ SCÈNE 4
 - Localisation : MANCHE / NORD
 - Bandeau Infos Météo : Vendredi : scénario à plus de 100 km/h en mer, 80 à terre.
 - Voix off Charon : Vendredi, un scénario envisage des rafales dépassant cent kilomètres par heure sur le littoral, contre quatre-vingts dans les terres. Finistère, Manche et Pas-de-Calais sont à surveiller. Ces pluies aideront les sols, sans effacer la sécheresse.
+
 SCÈNE 5
 - Image à utiliser : Image 2 — ECMWF IFS, rafales maximales cumulées
 - Badge : PRUDENCE
@@ -290,10 +348,11 @@ export default function StudioMeteoPage() {
       addArticleLog(`📥 Réponse reçue de DeepSeek V4.1 Flash (${data.content?.length || 0} caractères) !`, "ia");
 
       setManualPromptText(data.content);
-      handleParseManualPrompt(data.content);
+      await handleParseManualPrompt(data.content);
 
       setArticleProgressPercent(100);
       addArticleLog("✨ Article et Scènes rédigés et mis en page avec succès ! Prêt à être publié sur les 3 sites.", "success");
+      addArticleLog("👉 Cliquez ci-dessous sur '🚀 Publier l'Actualité sur les 3 sites' ou sur '🚀 Charger & Publier' pour mettre en ligne.", "publish");
     } catch (e: any) {
       addArticleLog(`❌ Erreur DeepSeek : ${e.message}`, "error");
       alert(e.message || "Erreur lors de l'appel à DeepSeek.");
@@ -335,8 +394,9 @@ export default function StudioMeteoPage() {
     }
   };
 
-  const handlePublishArticle = async () => {
-    if (!parsedArticle || !parsedArticle.title || !parsedArticle.htmlDark) {
+  const handlePublishArticle = async (articleToPublish?: ParsedArticleOutput | null) => {
+    const targetArticle = articleToPublish || parsedArticle;
+    if (!targetArticle || !targetArticle.title || !targetArticle.htmlDark) {
       alert("Aucun article à publier. Collez d'abord le résultat de votre Prompt IA.");
       return;
     }
@@ -348,8 +408,8 @@ export default function StudioMeteoPage() {
     setArticleElapsedSeconds(0);
 
     addArticleLog("🚀 Lancement de la publication simultanée 0-Build...", "publish");
-    addArticleLog(`📝 Titre : "${parsedArticle.title}"`, "info");
-    addArticleLog(`🏷️ Catégorie : ${parsedArticle.category}`, "info");
+    addArticleLog(`📝 Titre : "${targetArticle.title}"`, "info");
+    addArticleLog(`🏷️ Catégorie : ${targetArticle.category}`, "info");
 
     const timer = setInterval(() => {
       setArticleElapsedSeconds(Math.floor((Date.now() - tStart) / 1000));
@@ -358,7 +418,8 @@ export default function StudioMeteoPage() {
     try {
       setArticleProgressPercent(45);
       addArticleLog("🌐 Adaptation des styles : Dark Glass (Monsieur Météo) & Thème Clair Pro (MétéoBTP)...", "theme");
-      if (coverImageUrl) {
+      const coverUrl = coverImageUrl || scenes[0]?.file_url || null;
+      if (coverUrl) {
         addArticleLog(`📸 Photo de couverture associée : ${coverImageName || 'Couverture active'}`, "images");
       }
 
@@ -366,11 +427,11 @@ export default function StudioMeteoPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: parsedArticle.title,
-          excerpt: parsedArticle.excerpt,
-          category: parsedArticle.category,
-          content_dark: parsedArticle.htmlDark,
-          image_url: coverImageUrl || scenes[0]?.file_url || null
+          title: targetArticle.title,
+          excerpt: targetArticle.excerpt,
+          category: targetArticle.category,
+          content_dark: targetArticle.htmlDark,
+          image_url: coverUrl
         })
       });
       const data = await res.json();
@@ -390,6 +451,190 @@ export default function StudioMeteoPage() {
       });
       setArticleProgressPercent(100);
       addArticleLog(`🎉 Publication instantanée 0-Build terminée avec succès ! Slug : ${data.slug}`, "success");
+      setImportSuccessMessage(`🎉 Article publié avec succès sur MétéoBTP, Monsieur Météo et Climat-Météo !`);
+    } catch (e: any) {
+      addArticleLog(`❌ Erreur de publication : ${e.message}`, "error");
+      alert(e.message || "Erreur lors de la publication.");
+    } finally {
+      clearInterval(timer);
+      setPublishingArticle(false);
+      setArticleActionRunning(false);
+    }
+  };
+
+  // CHARGEMENT & PUBLICATION SIMULTANÉE EN 1 CLIC SUR LES 3 SITES
+  const handleLoadAndPublish = async (textOverride?: string) => {
+    const raw = (textOverride ?? manualPromptText).trim();
+    if (!raw) {
+      alert("Veuillez coller le résultat généré par ChatGPT dans la boîte.");
+      return;
+    }
+
+    const tStart = Date.now();
+    setPublishingArticle(true);
+    setArticleActionRunning(true);
+    setArticleActionTitle("Chargement & Publication 3-en-1");
+    setArticleProgressPercent(15);
+    setArticleElapsedSeconds(0);
+
+    const timer = setInterval(() => {
+      setArticleElapsedSeconds(Math.floor((Date.now() - tStart) / 1000));
+    }, 1000);
+
+    try {
+      addArticleLog("📥 Analyse mot pour mot du texte collé...", "info");
+      await new Promise(r => setTimeout(r, 200));
+
+      const existingImagesByRef: Record<number, { url: string; name: string }> = {};
+      batchUploadedImages.forEach(img => {
+        existingImagesByRef[img.ref] = { url: img.url, name: img.name };
+      });
+      scenes.forEach((sc, idx) => {
+        if (sc.file_url) {
+          const refNum = sc.image_ref || idx + 1;
+          if (!existingImagesByRef[refNum]) {
+            existingImagesByRef[refNum] = { url: sc.file_url, name: sc.file_name || `Image_${refNum}` };
+          }
+        }
+      });
+
+      const activeTheme = selectedThemeId === "auto"
+        ? detectBestArticleTheme(raw)
+        : (ARTICLE_THEMES.find(t => t.id === selectedThemeId) || ARTICLE_THEMES[0]);
+      addArticleLog(`🎨 Thème visuel sélectionné : ${activeTheme.name}`, "theme");
+      setArticleProgressPercent(35);
+      await new Promise(r => setTimeout(r, 200));
+
+      const art = buildWordForWordArticleHtml(raw, activeTheme, existingImagesByRef);
+      if (art) {
+        setParsedArticle(art);
+        if (art.title) setTopic(art.title);
+        addArticleLog(`📰 Article web structuré mot pour mot : "${art.title}"`, "success");
+        addArticleLog(`🏷️ Catégorie : ${art.category} • Chapeau : "${art.excerpt?.slice(0, 80)}..."`, "info");
+      }
+
+      // Parser les scènes
+      const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+(\d+)[^\n]*\n([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+\d+|\n\s*(?:#+\s*|\*\*)*PARTIE\s+\d+|\n\s*```|$))/gi;
+      const matches = [...raw.matchAll(sceneRegex)];
+      if (matches.length >= 2) {
+        const parsedScenes: Scene[] = matches.map((m, idx) => {
+          const sceneNum = Number(m[1]) || idx + 1;
+          const body = m[2] || "";
+          const lines = body.split("\n");
+          let badge = BADGE_PRESETS[idx % BADGE_PRESETS.length].badge;
+          let title = "";
+          let sub = "";
+          let location_tag = "";
+          let ticker = "";
+          let script_text = "";
+          let image_ref: number | undefined = undefined;
+          let image_hint: string | undefined = undefined;
+          let lastField = "";
+          for (const rawLine of lines) {
+            const line = rawLine.replace(/^\s*[-*•]+\s*/, "").replace(/\*\*/g, "").trim();
+            if (!line) continue;
+            const kv = line.match(/^([^:]+):\s*(.+)$/);
+            if (kv) {
+              const key = kv[1].trim().toLowerCase();
+              const val = kv[2].trim();
+              if (key.includes("image")) {
+                image_hint = val;
+                const numM = val.match(/image\s*(\d+)/i) || val.match(/(\d+)/);
+                if (numM) image_ref = Number(numM[1]);
+                lastField = "image";
+              } else if (key.includes("badge")) {
+                badge = val.toUpperCase();
+                lastField = "badge";
+              } else if (key.startsWith("sous-titre") || key.startsWith("sous titre")) {
+                sub = val.toUpperCase();
+                lastField = "sub";
+              } else if (key.startsWith("titre")) {
+                title = val.toUpperCase();
+                lastField = "title";
+              } else if (key.includes("localisation") || key.includes("lieu") || key.includes("région") || key.includes("region")) {
+                location_tag = val.toUpperCase();
+                lastField = "location";
+              } else if (key.includes("bandeau") || key.includes("ticker") || key.includes("infos météo")) {
+                ticker = val;
+                lastField = "ticker";
+              } else if (key.includes("voix off") || key.includes("script") || key.includes("charon") || key.includes("texte")) {
+                script_text = val;
+                lastField = "script";
+              } else if (lastField === "script") {
+                script_text += " " + line;
+              }
+            } else if (lastField === "script") {
+              script_text += " " + line;
+            }
+          }
+          const refToUse = image_ref || idx + 1;
+          const matchedImg = existingImagesByRef[refToUse];
+          return {
+            scene_number: sceneNum,
+            badge,
+            badge_color: getBadgeColor(badge, idx),
+            title,
+            sub,
+            location_tag,
+            ticker,
+            script_text: script_text.trim(),
+            file_url: matchedImg?.url || "",
+            file_name: matchedImg?.name || "",
+            image_ref: refToUse,
+            image_hint
+          };
+        });
+        setScenes(parsedScenes);
+        addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec voix off Charon.`, "success");
+      }
+
+      setArticleProgressPercent(55);
+      await new Promise(r => setTimeout(r, 200));
+
+      if (!art || !art.title || !art.htmlDark) {
+        addArticleLog("⚠️ Aucun article web complet détecté dans le texte (uniquement scènes vidéo).", "error");
+        addArticleLog("💡 Pour publier sur les sites, collez le texte contenant l'article web (avec === DEBUT ARTICLE ===) ou utilisez 'Rédiger avec DeepSeek'.", "info");
+        setArticleProgressPercent(100);
+        alert("Attention : Le texte collé ne contient pas d'article web complet (uniquement des scènes vidéo). Les scènes ont été chargées, mais aucun article n'a été publié en ligne.");
+        return;
+      }
+
+      // Envoi vers Supabase Cloud
+      setArticleProgressPercent(70);
+      addArticleLog("🌐 Déploiement en cours sur meteobtp.fr, monsieurmeteo.com et climat-meteo.vercel.app...", "publish");
+      const coverUrl = coverImageUrl || scenes[0]?.file_url || null;
+      if (coverUrl) {
+        addArticleLog(`📸 Photo de couverture associée : ${coverImageName || 'Couverture active'}`, "images");
+      }
+
+      const res = await fetch("/api/publish-article", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: art.title,
+          excerpt: art.excerpt,
+          category: art.category,
+          content_dark: art.htmlDark,
+          image_url: coverUrl
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur de publication.");
+
+      setArticleProgressPercent(90);
+      addArticleLog("☁️ Synchronisation Supabase Cloud terminée (meteo_posts & posts) !", "publish");
+      addArticleLog(`✨ meteobtp.fr : ${data.urls.meteobtp}`, "success");
+      addArticleLog(`✨ monsieurmeteo.com : ${data.urls.monsieurmeteo}`, "success");
+      addArticleLog(`✨ climat-meteo.vercel.app : ${data.urls.climatmeteo}`, "success");
+
+      setPublishedUrls({
+        meteobtp: data.urls.meteobtp,
+        monsieurmeteo: data.urls.monsieurmeteo,
+        climatmeteo: data.urls.climatmeteo,
+        slug: data.slug
+      });
+      setArticleProgressPercent(100);
+      addArticleLog(`🎉 Article publié avec succès en Zéro-Build ! Slug : ${data.slug}`, "success");
       setImportSuccessMessage(`🎉 Article publié avec succès sur MétéoBTP, Monsieur Météo et Climat-Météo !`);
     } catch (e: any) {
       addArticleLog(`❌ Erreur de publication : ${e.message}`, "error");
@@ -426,196 +671,216 @@ export default function StudioMeteoPage() {
   };
 
   // PARSEUR UNIVERSEL 1-CLIC DU RÉSULTAT DE PROMPT IA (Article Web + Format Texte SCÈNE 1..N ou JSON)
-  const handleParseManualPrompt = (textOverride?: string) => {
+  const handleParseManualPrompt = async (textOverride?: string): Promise<ParsedArticleOutput | null> => {
     const raw = (textOverride ?? manualPromptText).trim();
     if (!raw) {
       alert("Veuillez coller le résultat généré par votre prompt IA.");
-      return;
+      return null;
     }
     if (textOverride) setManualPromptText(textOverride);
 
+    const tStart = Date.now();
     setArticleActionRunning(true);
-    setArticleActionTitle("Extraction Mot pour Mot");
-    setArticleProgressPercent(25);
-    addArticleLog("📥 Début de l'analyse du texte collé (Mode Mot pour Mot)...", "info");
+    setArticleActionTitle("Prévisualisation Mot pour Mot");
+    setArticleProgressPercent(20);
+    setArticleElapsedSeconds(0);
 
-    // Conserver un dictionnaire des images déjà présentes par numéro (Image 1 -> index 0, etc.)
-    const existingImagesByRef: Record<number, { url: string; name: string }> = {};
-    batchUploadedImages.forEach(img => {
-      existingImagesByRef[img.ref] = { url: img.url, name: img.name };
-    });
-    scenes.forEach((sc, idx) => {
-      if (sc.file_url) {
-        const refNum = sc.image_ref || idx + 1;
-        if (!existingImagesByRef[refNum]) {
-          existingImagesByRef[refNum] = { url: sc.file_url, name: sc.file_name || `Image_${refNum}` };
+    const timer = setInterval(() => {
+      setArticleElapsedSeconds(Math.floor((Date.now() - tStart) / 1000));
+    }, 1000);
+
+    try {
+      addArticleLog("📥 Début de l'analyse du texte collé (Mode Mot pour Mot)...", "info");
+      await new Promise(r => setTimeout(r, 200));
+
+      // Conserver un dictionnaire des images déjà présentes par numéro (Image 1 -> index 0, etc.)
+      const existingImagesByRef: Record<number, { url: string; name: string }> = {};
+      batchUploadedImages.forEach(img => {
+        existingImagesByRef[img.ref] = { url: img.url, name: img.name };
+      });
+      scenes.forEach((sc, idx) => {
+        if (sc.file_url) {
+          const refNum = sc.image_ref || idx + 1;
+          if (!existingImagesByRef[refNum]) {
+            existingImagesByRef[refNum] = { url: sc.file_url, name: sc.file_name || `Image_${refNum}` };
+          }
         }
+      });
+
+      // A. Extraction et formatage de l'Article Web MOT POUR MOT
+      const activeTheme = selectedThemeId === "auto"
+        ? detectBestArticleTheme(raw)
+        : (ARTICLE_THEMES.find(t => t.id === selectedThemeId) || ARTICLE_THEMES[0]);
+      addArticleLog(`🎨 Thème visuel sélectionné : ${activeTheme.name}`, "theme");
+
+      setArticleProgressPercent(45);
+      await new Promise(r => setTimeout(r, 200));
+
+      const art = buildWordForWordArticleHtml(raw, activeTheme, existingImagesByRef);
+      if (art) {
+        setParsedArticle(art);
+        if (art.title) setTopic(art.title);
+        addArticleLog(`📰 Article web structuré mot pour mot : "${art.title}"`, "success");
+        addArticleLog(`🏷️ Catégorie : ${art.category} • Chapeau : "${art.excerpt?.slice(0, 80)}..."`, "info");
+        const imgCount = Object.keys(existingImagesByRef).length;
+        if (imgCount > 0) {
+          addArticleLog(`🖼️ ${imgCount} carte(s) météo reliée(s) aux légendes de l'article`, "images");
+        }
+      } else {
+        addArticleLog("ℹ️ Aucun bloc d'article web complet détecté (uniquement scènes vidéo).", "info");
       }
-    });
 
-    // A. Extraction et formatage de l'Article Web MOT POUR MOT
-    const activeTheme = selectedThemeId === "auto"
-      ? detectBestArticleTheme(raw)
-      : (ARTICLE_THEMES.find(t => t.id === selectedThemeId) || ARTICLE_THEMES[0]);
-    addArticleLog(`🎨 Thème visuel sélectionné : ${activeTheme.name}`, "theme");
+      await new Promise(r => setTimeout(r, 200));
 
-    setArticleProgressPercent(50);
-    const art = buildWordForWordArticleHtml(raw, activeTheme, existingImagesByRef);
-    if (art) {
-      setParsedArticle(art);
-      if (art.title) setTopic(art.title);
-      addArticleLog(`📰 Article web structuré mot pour mot : "${art.title}"`, "success");
-      addArticleLog(`🏷️ Catégorie : ${art.category} • Chapeau : "${art.excerpt?.slice(0, 80)}..."`, "info");
-      const imgCount = Object.keys(existingImagesByRef).length;
-      if (imgCount > 0) {
-        addArticleLog(`🖼️ ${imgCount} carte(s) météo reliée(s) aux légendes de l'article`, "images");
-      }
-    } else {
-      addArticleLog("ℹ️ Aucun bloc d'article web complet détecté (uniquement scènes vidéo).", "info");
-    }
+      // B. Extraction des blocs "SCÈNE 1", "SCÈNE 2"...
+      const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+(\d+)[^\n]*\n([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+\d+|\n\s*(?:#+\s*|\*\*)*PARTIE\s+\d+|\n\s*```|$))/gi;
+      const matches = [...raw.matchAll(sceneRegex)];
 
-    // B. Extraction des blocs "SCÈNE 1", "SCÈNE 2"...
-    const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+(\d+)[^\n]*\n([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+\d+|\n\s*(?:#+\s*|\*\*)*PARTIE\s+\d+|\n\s*```|$))/gi;
-    const matches = [...raw.matchAll(sceneRegex)];
+      if (matches.length >= 2) {
+        setArticleProgressPercent(75);
+        const parsedScenes: Scene[] = matches.map((m, idx) => {
+          const sceneNum = Number(m[1]) || idx + 1;
+          const body = m[2] || "";
+          const lines = body.split("\n");
 
-    if (matches.length >= 2) {
-      setArticleProgressPercent(75);
-      const parsedScenes: Scene[] = matches.map((m, idx) => {
-        const sceneNum = Number(m[1]) || idx + 1;
-        const body = m[2] || "";
-        const lines = body.split("\n");
+          let badge = BADGE_PRESETS[idx % BADGE_PRESETS.length].badge;
+          let title = "";
+          let sub = "";
+          let location_tag = "";
+          let ticker = "";
+          let script_text = "";
+          let image_ref: number | undefined = undefined;
+          let image_hint: string | undefined = undefined;
+          let lastField = "";
 
-        let badge = BADGE_PRESETS[idx % BADGE_PRESETS.length].badge;
-        let title = "";
-        let sub = "";
-        let location_tag = "";
-        let ticker = "";
-        let script_text = "";
-        let image_ref: number | undefined = undefined;
-        let image_hint: string | undefined = undefined;
-        let lastField = "";
+          for (const rawLine of lines) {
+            const line = rawLine.replace(/^\s*[-*•]+\s*/, "").replace(/\*\*/g, "").trim();
+            if (!line) continue;
 
-        for (const rawLine of lines) {
-          const line = rawLine.replace(/^\s*[-*•]+\s*/, "").replace(/\*\*/g, "").trim();
-          if (!line) continue;
+            const kv = line.match(/^([^:]+):\s*(.+)$/);
+            if (kv) {
+              const key = kv[1].trim().toLowerCase();
+              const val = kv[2].trim();
 
-          const kv = line.match(/^([^:]+):\s*(.+)$/);
-          if (kv) {
-            const key = kv[1].trim().toLowerCase();
-            const val = kv[2].trim();
-
-            if (key.includes("image")) {
-              image_hint = val;
-              const numM = val.match(/image\s*(\d+)/i) || val.match(/(\d+)/);
-              if (numM) image_ref = Number(numM[1]);
-              lastField = "image";
-            } else if (key.includes("badge")) {
-              badge = val.toUpperCase();
-              lastField = "badge";
-            } else if (key.startsWith("sous-titre") || key.startsWith("sous titre")) {
-              sub = val.toUpperCase();
-              lastField = "sub";
-            } else if (key.startsWith("titre")) {
-              title = val.toUpperCase();
-              lastField = "title";
-            } else if (key.includes("localisation") || key.includes("lieu") || key.includes("région") || key.includes("region")) {
-              location_tag = val.toUpperCase();
-              lastField = "location";
-            } else if (key.includes("bandeau") || key.includes("ticker") || key.includes("infos météo")) {
-              ticker = val;
-              lastField = "ticker";
-            } else if (key.includes("voix off") || key.includes("script") || key.includes("charon") || key.includes("texte")) {
-              script_text = val;
-              lastField = "script";
+              if (key.includes("image")) {
+                image_hint = val;
+                const numM = val.match(/image\s*(\d+)/i) || val.match(/(\d+)/);
+                if (numM) image_ref = Number(numM[1]);
+                lastField = "image";
+              } else if (key.includes("badge")) {
+                badge = val.toUpperCase();
+                lastField = "badge";
+              } else if (key.startsWith("sous-titre") || key.startsWith("sous titre")) {
+                sub = val.toUpperCase();
+                lastField = "sub";
+              } else if (key.startsWith("titre")) {
+                title = val.toUpperCase();
+                lastField = "title";
+              } else if (key.includes("localisation") || key.includes("lieu") || key.includes("région") || key.includes("region")) {
+                location_tag = val.toUpperCase();
+                lastField = "location";
+              } else if (key.includes("bandeau") || key.includes("ticker") || key.includes("infos météo")) {
+                ticker = val;
+                lastField = "ticker";
+              } else if (key.includes("voix off") || key.includes("script") || key.includes("charon") || key.includes("texte")) {
+                script_text = val;
+                lastField = "script";
+              } else if (lastField === "script") {
+                script_text += " " + line;
+              }
             } else if (lastField === "script") {
               script_text += " " + line;
             }
-          } else if (lastField === "script") {
-            script_text += " " + line;
           }
-        }
 
-        const refToUse = image_ref || idx + 1;
-        const matchedImg = existingImagesByRef[refToUse];
-
-        return {
-          scene_number: sceneNum,
-          badge,
-          badge_color: getBadgeColor(badge, idx),
-          title,
-          sub,
-          location_tag,
-          ticker,
-          script_text: script_text.trim(),
-          file_url: matchedImg?.url || "",
-          file_name: matchedImg?.name || "",
-          image_ref: refToUse,
-          image_hint
-        };
-      });
-
-      setScenes(parsedScenes);
-      if (parsedScenes[0]?.title && !art?.title) setTopic(parsedScenes[0].title);
-      addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec voix off Charon.`, "success");
-
-      setArticleProgressPercent(100);
-      setArticleActionRunning(false);
-      addArticleLog("🎉 Article mot pour mot et scènes vidéo prêts ! Vous pouvez vérifier l'aperçu ou publier.", "success");
-      
-      const msg = art
-        ? `✅ Article web complet (mot pour mot en présentation « ${activeTheme.badge} ») + ${parsedScenes.length} scènes vidéo chargés en 1 clic !`
-        : `✅ Les ${parsedScenes.length} scènes vidéo ont été remplies automatiquement en 1 clic !`;
-      setImportSuccessMessage(msg);
-      return;
-    }
-
-    if (art) {
-      setArticleProgressPercent(100);
-      setArticleActionRunning(false);
-      addArticleLog("🎉 Article web structuré mot pour mot ! Prêt pour la publication sur les 3 sites.", "success");
-      setImportSuccessMessage(`✅ L'article web complet a été structuré mot pour mot dans la présentation « ${activeTheme.badge} » !`);
-      return;
-    }
-
-    // 2. Fallback JSON si l'utilisateur a collé le bloc JSON de la Partie 4
-    try {
-      const s = raw.indexOf("{");
-      const e = raw.lastIndexOf("}");
-      const jsonStr = s !== -1 && e > s ? raw.slice(s, e + 1) : raw;
-      const parsed = JSON.parse(jsonStr);
-      const arr = Array.isArray(parsed) ? parsed : parsed.scenes;
-      if (Array.isArray(arr) && arr.length >= 2) {
-        const parsedScenes: Scene[] = arr.map((sc: any, idx: number) => {
-          const refToUse = Number(sc.image_index || sc.image_ref) || idx + 1;
+          const refToUse = image_ref || idx + 1;
           const matchedImg = existingImagesByRef[refToUse];
-          const badge = (sc.badge || BADGE_PRESETS[idx % BADGE_PRESETS.length].badge).toUpperCase();
+
           return {
-            scene_number: idx + 1,
+            scene_number: sceneNum,
             badge,
-            badge_color: Array.isArray(sc.badge_color) ? sc.badge_color : getBadgeColor(badge, idx),
-            title: (sc.title || "").toUpperCase(),
-            sub: (sc.sub || "").toUpperCase(),
-            location_tag: (sc.location_tag || "").toUpperCase(),
-            ticker: sc.ticker || "",
-            script_text: sc.script_text || "",
+            badge_color: getBadgeColor(badge, idx),
+            title,
+            sub,
+            location_tag,
+            ticker,
+            script_text: script_text.trim(),
             file_url: matchedImg?.url || "",
             file_name: matchedImg?.name || "",
             image_ref: refToUse,
-            image_hint: sc.image_index ? `Image ${sc.image_index}` : undefined
+            image_hint
           };
         });
-        setScenes(parsedScenes);
-        if (parsed.phenomenon) {
-          setIsCustomPhenomenon(true);
-          setCustomPhenomenon(parsed.phenomenon);
-        }
-        if (parsedScenes[0]?.title) setTopic(parsedScenes[0].title);
-        setImportSuccessMessage(`✅ Les ${parsedScenes.length} scènes JSON ont été remplies automatiquement en 1 clic !`);
-        return;
-      }
-    } catch {}
 
-    alert("Format non reconnu. Collez le texte contenant 'SCÈNE 1 ... SCÈNE 5' ou le bloc JSON.");
+        setScenes(parsedScenes);
+        if (parsedScenes[0]?.title && !art?.title) setTopic(parsedScenes[0].title);
+        addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec voix off Charon.`, "success");
+
+        setArticleProgressPercent(100);
+        if (art) {
+          addArticleLog(`🎉 Article mot pour mot et ${parsedScenes.length} scènes vidéo prêts ! Cliquez sur 'Publier' pour mettre en ligne.`, "success");
+        } else {
+          addArticleLog(`⚠️ ${parsedScenes.length} scènes vidéo prêtes (aucun article web complet détecté dans le texte).`, "info");
+        }
+        
+        const msg = art
+          ? `✅ Article web complet (mot pour mot en présentation « ${activeTheme.badge} ») + ${parsedScenes.length} scènes vidéo chargés en 1 clic !`
+          : `✅ Les ${parsedScenes.length} scènes vidéo ont été remplies automatiquement en 1 clic !`;
+        setImportSuccessMessage(msg);
+        return art;
+      }
+
+      if (art) {
+        setArticleProgressPercent(100);
+        addArticleLog("🎉 Article web structuré mot pour mot ! Prêt pour la publication sur les 3 sites.", "success");
+        setImportSuccessMessage(`✅ L'article web complet a été structuré mot pour mot dans la présentation « ${activeTheme.badge} » !`);
+        return art;
+      }
+
+      // 2. Fallback JSON si l'utilisateur a collé le bloc JSON de la Partie 4
+      try {
+        const s = raw.indexOf("{");
+        const e = raw.lastIndexOf("}");
+        const jsonStr = s !== -1 && e > s ? raw.slice(s, e + 1) : raw;
+        const parsed = JSON.parse(jsonStr);
+        const arr = Array.isArray(parsed) ? parsed : parsed.scenes;
+        if (Array.isArray(arr) && arr.length >= 2) {
+          const parsedScenes: Scene[] = arr.map((sc: any, idx: number) => {
+            const refToUse = Number(sc.image_index || sc.image_ref) || idx + 1;
+            const matchedImg = existingImagesByRef[refToUse];
+            const badge = (sc.badge || BADGE_PRESETS[idx % BADGE_PRESETS.length].badge).toUpperCase();
+            return {
+              scene_number: idx + 1,
+              badge,
+              badge_color: Array.isArray(sc.badge_color) ? sc.badge_color : getBadgeColor(badge, idx),
+              title: (sc.title || "").toUpperCase(),
+              sub: (sc.sub || "").toUpperCase(),
+              location_tag: (sc.location_tag || "").toUpperCase(),
+              ticker: sc.ticker || "",
+              script_text: sc.script_text || "",
+              file_url: matchedImg?.url || "",
+              file_name: matchedImg?.name || "",
+              image_ref: refToUse,
+              image_hint: sc.image_index ? `Image ${sc.image_index}` : undefined
+            };
+          });
+          setScenes(parsedScenes);
+          if (parsed.phenomenon) {
+            setIsCustomPhenomenon(true);
+            setCustomPhenomenon(parsed.phenomenon);
+          }
+          if (parsedScenes[0]?.title) setTopic(parsedScenes[0].title);
+          setImportSuccessMessage(`✅ Les ${parsedScenes.length} scènes JSON ont été remplies automatiquement en 1 clic !`);
+          return null;
+        }
+      } catch {}
+
+      alert("Format non reconnu. Collez le texte contenant 'SCÈNE 1 ... SCÈNE 5' ou le bloc JSON.");
+      return null;
+    } finally {
+      clearInterval(timer);
+      setArticleActionRunning(false);
+    }
   };
 
   useEffect(() => {
@@ -1125,18 +1390,34 @@ export default function StudioMeteoPage() {
             />
 
             <div className="flex flex-wrap items-center gap-3">
+              {/* BOUTON MAÎTRE 1-CLIC : CHARGER & DÉPLOYER IMMÉDIATEMENT SUR LES 3 SITES */}
+              <button
+                type="button"
+                onClick={() => handleLoadAndPublish()}
+                disabled={publishingArticle || articleActionRunning || generatingWithDeepseek}
+                className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black rounded-xl shadow-xl shadow-emerald-500/30 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer disabled:opacity-50 ring-2 ring-emerald-400/40"
+                title="Charge les scènes, formate l'article mot pour mot et déploie instantanément sur meteobtp.fr, monsieurmeteo.com et climat-meteo.vercel.app"
+              >
+                {publishingArticle ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                {publishingArticle ? "Publication en direct..." : "🚀 Charger & Publier DIRECTEMENT sur les 3 sites"}
+              </button>
+
+              {/* BOUTON PRÉVISUALISER SANS PUBLIER */}
               <button
                 type="button"
                 onClick={() => handleParseManualPrompt()}
-                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer"
+                disabled={publishingArticle || articleActionRunning || generatingWithDeepseek}
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/40 hover:border-amber-400 font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer disabled:opacity-50"
+                title="Analyser et charger les scènes et l'article sans publier immédiatement"
               >
-                <Sparkles className="w-4 h-4" /> ⚡ Charger l'Article & les Scènes (Mot pour Mot)
+                <Eye className="w-4 h-4" /> 👁️ Prévisualiser seulement
               </button>
 
+              {/* BOUTON RÉDIGER AVEC DEEPSEEK */}
               <button
                 type="button"
                 onClick={handleGenerateWithDeepseek}
-                disabled={generatingWithDeepseek}
+                disabled={generatingWithDeepseek || publishingArticle || articleActionRunning}
                 className="px-4 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-black rounded-xl shadow-lg shadow-indigo-600/25 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer disabled:opacity-50"
                 title="Générer l'article 27 sections et les 5 scènes directement avec DeepSeek V4.1 Flash (Token 0 / OpenRouter)"
               >
@@ -1144,9 +1425,9 @@ export default function StudioMeteoPage() {
                 {generatingWithDeepseek ? "DeepSeek rédige..." : "🤖 Rédiger avec DeepSeek V4.1 Flash"}
               </button>
 
-              <label className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
+              <label className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-xl shadow-lg shadow-sky-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
                 {uploadingBatch ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {uploadingBatch ? "Téléversement..." : "🖼️ Importer mes cartes météo (Image 1, 2, 3...)"}
+                {uploadingBatch ? "Téléversement..." : "🖼️ Importer cartes (Image 1, 2, 3...)"}
                 <input
                   type="file"
                   accept="image/*,.gif"
@@ -1156,9 +1437,9 @@ export default function StudioMeteoPage() {
                 />
               </label>
 
-              <label className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
+              <label className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
                 {uploadingCover ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                {uploadingCover ? "Upload couverture..." : "📸 Photo de couverture 16:9"}
+                {uploadingCover ? "Upload couverture..." : "📸 Photo couverture 16:9"}
                 <input
                   type="file"
                   accept="image/*"
@@ -1349,7 +1630,7 @@ export default function StudioMeteoPage() {
 
                   <button
                     type="button"
-                    onClick={handlePublishArticle}
+                    onClick={() => handlePublishArticle()}
                     disabled={publishingArticle}
                     className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50 shrink-0"
                   >
