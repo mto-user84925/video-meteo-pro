@@ -1168,6 +1168,23 @@ export default function StudioMeteoPage() {
     }
   };
 
+  // Auto-parsing réactif : dès que l'utilisateur colle ou tape un prompt complet avec scènes/article
+  useEffect(() => {
+    if (!manualPromptText || manualPromptText.trim().length < 40) return;
+    const hasScript = manualPromptText.includes("SCÈNE") || manualPromptText.includes("Voix off") || manualPromptText.includes("LIVRABLE 2");
+    const hasArticle = manualPromptText.includes("TITRE SEO") || manualPromptText.includes("CHAPEAU") || manualPromptText.includes("DEBUT ARTICLE");
+    if (!hasScript && !hasArticle) return;
+
+    const timer = setTimeout(() => {
+      const scenesEmpty = scenes.every(s => !s.script_text.trim());
+      if (scenesEmpty || !parsedArticle) {
+        handleParseManualPrompt(manualPromptText, { silent: true });
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [manualPromptText, scenes, parsedArticle]);
+
   // IMPORT AUTOMATIQUE EN 1 CLIC DEPUIS N'IMPORTE QUEL LIEN WEB D'ARTICLE (OPTION A)
   const handleImportArticle = async (urlToFetch?: string) => {
     const targetUrl = urlToFetch || articleUrl;
@@ -1283,6 +1300,14 @@ export default function StudioMeteoPage() {
 
   // Génération du script par IA seule (sans lien)
   const handleGenerateScript = async () => {
+    // Si un script est déjà présent dans la boîte texte, le resynchroniser immédiatement
+    if (manualPromptText && (manualPromptText.includes("SCÈNE") || manualPromptText.includes("Voix off") || manualPromptText.includes("LIVRABLE 2"))) {
+      addArticleLog("🎬 Synchronisation instantanée des 5 scènes à partir de votre script ChatGPT / DeepSeek...", "info");
+      await handleParseManualPrompt(manualPromptText);
+      notify("✨ Scènes synchronisées depuis votre script !", "success");
+      return;
+    }
+
     setGeneratingScript(true);
     notify(`Régénération du script par IA calibré sur ${targetDuration}s...`, "info");
     try {
@@ -1418,15 +1443,7 @@ export default function StudioMeteoPage() {
       }
 
       if (manualPromptText) {
-        const existingImagesByRef: Record<number, { url: string; name: string }> = {};
-        batchWithRefs.forEach(img => {
-          existingImagesByRef[img.ref] = { url: img.url, name: img.name };
-        });
-        const activeTheme = selectedThemeId === "auto"
-          ? detectBestArticleTheme(manualPromptText)
-          : (ARTICLE_THEMES.find(t => t.id === selectedThemeId) || ARTICLE_THEMES[0]);
-        const reParsed = buildWordForWordArticleHtml(manualPromptText, activeTheme, existingImagesByRef);
-        if (reParsed) setParsedArticle(reParsed);
+        await handleParseManualPrompt(manualPromptText, { silent: true });
       }
 
       addArticleLog(`✓ ${uploaded.length} carte(s) météo téléversée(s) et reliée(s) aux scènes et à l'article.`, "success");
@@ -1899,7 +1916,13 @@ export default function StudioMeteoPage() {
               onPaste={e => {
                 const pasted = e.clipboardData.getData("text");
                 if (pasted) {
+                  setManualPromptText(pasted);
                   autoDetectAndUpdateMetadata(pasted);
+                  if (pasted.length >= 30 && (pasted.includes("SCÈNE") || pasted.includes("Voix off") || pasted.includes("TITRE") || pasted.includes("DEBUT ARTICLE") || pasted.includes("LIVRABLE"))) {
+                    setTimeout(() => {
+                      handleParseManualPrompt(pasted, { silent: true });
+                    }, 50);
+                  }
                 }
               }}
               className="w-full bg-slate-950/90 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono leading-relaxed"
