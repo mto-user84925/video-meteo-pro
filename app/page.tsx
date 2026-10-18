@@ -11,6 +11,13 @@ interface LogEntry {
   type: 'info' | 'voice' | 'video' | 'audio' | 'success';
 }
 
+interface ArticleLogEntry {
+  id: string;
+  time: string;
+  text: string;
+  type: 'info' | 'ia' | 'theme' | 'images' | 'publish' | 'success' | 'error';
+}
+
 interface Scene {
   scene_number: number;
   badge: string;
@@ -172,6 +179,34 @@ export default function StudioMeteoPage() {
   const [progressPercent, setProgressPercent] = useState(0);
   const logsContainerRef = useRef<HTMLDivElement>(null);
 
+  // Journal de logs pour la rédaction & publication des articles
+  const [articleLogs, setArticleLogs] = useState<ArticleLogEntry[]>([]);
+  const [articleElapsedSeconds, setArticleElapsedSeconds] = useState(0);
+  const [articleProgressPercent, setArticleProgressPercent] = useState(0);
+  const [articleActionRunning, setArticleActionRunning] = useState(false);
+  const [articleActionTitle, setArticleActionTitle] = useState("");
+  const articleLogsContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (articleLogsContainerRef.current) {
+      articleLogsContainerRef.current.scrollTop = articleLogsContainerRef.current.scrollHeight;
+    }
+  }, [articleLogs]);
+
+  const addArticleLog = (text: string, type: ArticleLogEntry['type'] = 'info') => {
+    const d = new Date();
+    const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+    setArticleLogs(prev => [
+      ...prev,
+      {
+        id: `alog_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        time,
+        text,
+        type
+      }
+    ]);
+  };
+
   // Vider tout cache navigateur éventuel à chaque ouverture du studio
   useEffect(() => {
     try {
@@ -194,6 +229,9 @@ export default function StudioMeteoPage() {
     setResultTiktok(null);
     setResultLandscape(null);
     setLogs([]);
+    setArticleLogs([]);
+    setArticleProgressPercent(0);
+    setArticleElapsedSeconds(0);
     setSessionId(null);
   };
 
@@ -202,6 +240,7 @@ export default function StudioMeteoPage() {
       await navigator.clipboard.writeText(MASTER_PROMPT_ARTICLE_AND_VIDEO);
       setPromptCopied(true);
       setTimeout(() => setPromptCopied(false), 3000);
+      addArticleLog("📋 Prompt Maître 2-en-1 copié dans le presse-papier ! Collez-le dans ChatGPT avec votre actualité.", "success");
     } catch {
       alert("Veuillez copier le texte du prompt manuellement.");
     }
@@ -213,9 +252,27 @@ export default function StudioMeteoPage() {
       alert("Veuillez saisir des notes, un sujet ou du texte brut dans la boîte avant de lancer DeepSeek.");
       return;
     }
+    const tStart = Date.now();
     setGeneratingWithDeepseek(true);
-    setImportSuccessMessage("🤖 Rédaction de l'article (27 sections) et des 5 scènes en cours avec DeepSeek V4.1 Flash (patientez ~15-20s)...");
+    setArticleActionRunning(true);
+    setArticleActionTitle("Rédaction DeepSeek V4.1 Flash");
+    setArticleProgressPercent(15);
+    setArticleElapsedSeconds(0);
+
+    addArticleLog("🤖 Connexion à l'API OpenRouter (Modèle : deepseek/deepseek-v4.1-flash-1017)...", "ia");
+    addArticleLog("📜 Chargement du Prompt Maître Officiel ACTUBTP (Règle Zéro Média externe, Météo-Climat Pro)...", "info");
+    addArticleLog(`🎯 Sujet analysé : "${rawToUse.slice(0, 90)}${rawToUse.length > 90 ? '...' : ''}"`, "info");
+
+    const timer = setInterval(() => {
+      setArticleElapsedSeconds(Math.floor((Date.now() - tStart) / 1000));
+    }, 1000);
+
+    const progTimer = setInterval(() => {
+      setArticleProgressPercent(prev => (prev < 85 ? prev + 10 : prev));
+    }, 2000);
+
     try {
+      addArticleLog("⏳ Rédaction journalistique en cours (titre SEO, chapeau, corps 500 mots, 5 scènes)...", "ia");
       const res = await fetch("/api/generate-article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -227,12 +284,24 @@ export default function StudioMeteoPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur de génération.");
+
+      clearInterval(progTimer);
+      setArticleProgressPercent(90);
+      addArticleLog(`📥 Réponse reçue de DeepSeek V4.1 Flash (${data.content?.length || 0} caractères) !`, "ia");
+
       setManualPromptText(data.content);
       handleParseManualPrompt(data.content);
+
+      setArticleProgressPercent(100);
+      addArticleLog("✨ Article et Scènes rédigés et mis en page avec succès ! Prêt à être publié sur les 3 sites.", "success");
     } catch (e: any) {
+      addArticleLog(`❌ Erreur DeepSeek : ${e.message}`, "error");
       alert(e.message || "Erreur lors de l'appel à DeepSeek.");
     } finally {
+      clearInterval(timer);
+      clearInterval(progTimer);
       setGeneratingWithDeepseek(false);
+      setArticleActionRunning(false);
     }
   };
 
@@ -240,6 +309,7 @@ export default function StudioMeteoPage() {
     const sId = sessionId || `session_${Date.now()}`;
     if (!sessionId) setSessionId(sId);
     setUploadingCover(true);
+    addArticleLog(`📸 Téléversement de la photo de couverture 16:9 : "${file.name}"...`, "images");
     try {
       const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
       const remotePath = `blog/${Date.now()}_couverture_${safeName}`;
@@ -256,7 +326,9 @@ export default function StudioMeteoPage() {
       const pubUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/${remotePath}`;
       setCoverImageUrl(pubUrl);
       setCoverImageName(file.name);
+      addArticleLog(`✓ Photo de couverture enregistrée sur Supabase Storage.`, "success");
     } catch (e) {
+      addArticleLog(`❌ Erreur lors de l'envoi de la photo de couverture.`, "error");
       alert("Erreur lors de l'envoi de la photo de couverture.");
     } finally {
       setUploadingCover(false);
@@ -268,8 +340,28 @@ export default function StudioMeteoPage() {
       alert("Aucun article à publier. Collez d'abord le résultat de votre Prompt IA.");
       return;
     }
+    const tStart = Date.now();
     setPublishingArticle(true);
+    setArticleActionRunning(true);
+    setArticleActionTitle("Publication multi-sites 0-Build");
+    setArticleProgressPercent(20);
+    setArticleElapsedSeconds(0);
+
+    addArticleLog("🚀 Lancement de la publication simultanée 0-Build...", "publish");
+    addArticleLog(`📝 Titre : "${parsedArticle.title}"`, "info");
+    addArticleLog(`🏷️ Catégorie : ${parsedArticle.category}`, "info");
+
+    const timer = setInterval(() => {
+      setArticleElapsedSeconds(Math.floor((Date.now() - tStart) / 1000));
+    }, 1000);
+
     try {
+      setArticleProgressPercent(45);
+      addArticleLog("🌐 Adaptation des styles : Dark Glass (Monsieur Météo) & Thème Clair Pro (MétéoBTP)...", "theme");
+      if (coverImageUrl) {
+        addArticleLog(`📸 Photo de couverture associée : ${coverImageName || 'Couverture active'}`, "images");
+      }
+
       const res = await fetch("/api/publish-article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,17 +375,29 @@ export default function StudioMeteoPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur de publication.");
+
+      setArticleProgressPercent(90);
+      addArticleLog("☁️ Synchronisation Supabase Cloud terminée (tables meteo_posts & posts) !", "publish");
+      addArticleLog(`✨ meteobtp.fr (Thème Clair Pro) : ${data.urls.meteobtp}`, "success");
+      addArticleLog(`✨ monsieurmeteo.com (Dark Glass) : ${data.urls.monsieurmeteo}`, "success");
+      addArticleLog(`✨ climat-meteo.vercel.app : ${data.urls.climatmeteo}`, "success");
+
       setPublishedUrls({
         meteobtp: data.urls.meteobtp,
         monsieurmeteo: data.urls.monsieurmeteo,
         climatmeteo: data.urls.climatmeteo,
         slug: data.slug
       });
+      setArticleProgressPercent(100);
+      addArticleLog(`🎉 Publication instantanée 0-Build terminée avec succès ! Slug : ${data.slug}`, "success");
       setImportSuccessMessage(`🎉 Article publié avec succès sur MétéoBTP, Monsieur Météo et Climat-Météo !`);
     } catch (e: any) {
+      addArticleLog(`❌ Erreur de publication : ${e.message}`, "error");
       alert(e.message || "Erreur lors de la publication.");
     } finally {
+      clearInterval(timer);
       setPublishingArticle(false);
+      setArticleActionRunning(false);
     }
   };
 
@@ -330,6 +434,11 @@ export default function StudioMeteoPage() {
     }
     if (textOverride) setManualPromptText(textOverride);
 
+    setArticleActionRunning(true);
+    setArticleActionTitle("Extraction Mot pour Mot");
+    setArticleProgressPercent(25);
+    addArticleLog("📥 Début de l'analyse du texte collé (Mode Mot pour Mot)...", "info");
+
     // Conserver un dictionnaire des images déjà présentes par numéro (Image 1 -> index 0, etc.)
     const existingImagesByRef: Record<number, { url: string; name: string }> = {};
     batchUploadedImages.forEach(img => {
@@ -348,10 +457,21 @@ export default function StudioMeteoPage() {
     const activeTheme = selectedThemeId === "auto"
       ? detectBestArticleTheme(raw)
       : (ARTICLE_THEMES.find(t => t.id === selectedThemeId) || ARTICLE_THEMES[0]);
+    addArticleLog(`🎨 Thème visuel sélectionné : ${activeTheme.name}`, "theme");
+
+    setArticleProgressPercent(50);
     const art = buildWordForWordArticleHtml(raw, activeTheme, existingImagesByRef);
     if (art) {
       setParsedArticle(art);
       if (art.title) setTopic(art.title);
+      addArticleLog(`📰 Article web structuré mot pour mot : "${art.title}"`, "success");
+      addArticleLog(`🏷️ Catégorie : ${art.category} • Chapeau : "${art.excerpt?.slice(0, 80)}..."`, "info");
+      const imgCount = Object.keys(existingImagesByRef).length;
+      if (imgCount > 0) {
+        addArticleLog(`🖼️ ${imgCount} carte(s) météo reliée(s) aux légendes de l'article`, "images");
+      }
+    } else {
+      addArticleLog("ℹ️ Aucun bloc d'article web complet détecté (uniquement scènes vidéo).", "info");
     }
 
     // B. Extraction des blocs "SCÈNE 1", "SCÈNE 2"...
@@ -359,6 +479,7 @@ export default function StudioMeteoPage() {
     const matches = [...raw.matchAll(sceneRegex)];
 
     if (matches.length >= 2) {
+      setArticleProgressPercent(75);
       const parsedScenes: Scene[] = matches.map((m, idx) => {
         const sceneNum = Number(m[1]) || idx + 1;
         const body = m[2] || "";
@@ -435,6 +556,11 @@ export default function StudioMeteoPage() {
 
       setScenes(parsedScenes);
       if (parsedScenes[0]?.title && !art?.title) setTopic(parsedScenes[0].title);
+      addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec voix off Charon.`, "success");
+
+      setArticleProgressPercent(100);
+      setArticleActionRunning(false);
+      addArticleLog("🎉 Article mot pour mot et scènes vidéo prêts ! Vous pouvez vérifier l'aperçu ou publier.", "success");
       
       const msg = art
         ? `✅ Article web complet (mot pour mot en présentation « ${activeTheme.badge} ») + ${parsedScenes.length} scènes vidéo chargés en 1 clic !`
@@ -444,6 +570,9 @@ export default function StudioMeteoPage() {
     }
 
     if (art) {
+      setArticleProgressPercent(100);
+      setArticleActionRunning(false);
+      addArticleLog("🎉 Article web structuré mot pour mot ! Prêt pour la publication sur les 3 sites.", "success");
       setImportSuccessMessage(`✅ L'article web complet a été structuré mot pour mot dans la présentation « ${activeTheme.badge} » !`);
       return;
     }
@@ -644,6 +773,7 @@ export default function StudioMeteoPage() {
     const sId = sessionId || `session_${Date.now()}`;
     if (!sessionId) setSessionId(sId);
     setUploadingBatch(true);
+    addArticleLog(`🖼️ Téléversement groupé de ${files.length} carte(s) météo vers Supabase Storage...`, "images");
 
     try {
       const uploaded = await Promise.all(
@@ -717,9 +847,11 @@ export default function StudioMeteoPage() {
         if (reParsed) setParsedArticle(reParsed);
       }
 
+      addArticleLog(`✓ ${uploaded.length} carte(s) météo téléversée(s) et reliée(s) aux scènes et à l'article.`, "success");
       setImportSuccessMessage(`✅ ${uploaded.length} image(s) téléversée(s) et associées intelligemment à l'article et aux scènes !`);
     } catch (e) {
       console.error(e);
+      addArticleLog("❌ Erreur lors de l'envoi groupé des images.", "error");
       alert("Erreur lors de l'envoi groupé des images.");
     } finally {
       setUploadingBatch(false);
@@ -1063,6 +1195,99 @@ export default function StudioMeteoPage() {
                     ✓ Image active : {coverImageName}
                   </span>
                 )}
+              </div>
+            )}
+
+            {/* JOURNAL DE LOGS EN DIRECT (CONSOLE RÉDACTION & DÉPLOIEMENT ARTICLE) */}
+            {(articleActionRunning || articleLogs.length > 0) && (
+              <div className="mt-4 bg-slate-950 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-2xl space-y-3.5 text-left">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+                      <Terminal className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <span>Journal de Rédaction & Déploiement d'Actualités</span>
+                      </h3>
+                      <p className="text-[11px] text-slate-400">Suivi en direct de l'extraction mot pour mot, de DeepSeek V4.1 et de la publication 0-Build.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs font-mono text-slate-300 font-bold bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+                      ⏱️ {Math.floor(articleElapsedSeconds / 60).toString().padStart(2, '0')}:{(articleElapsedSeconds % 60).toString().padStart(2, '0')}
+                    </span>
+                    {articleActionRunning ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 rounded-full">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                        {articleActionTitle || "Traitement en cours"}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 rounded-full">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Opération terminée
+                      </span>
+                    )}
+                    {articleLogs.length > 0 && !articleActionRunning && (
+                      <button
+                        type="button"
+                        onClick={() => setArticleLogs([])}
+                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-900 rounded-lg transition cursor-pointer"
+                        title="Effacer le journal d'actualités"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* BARRE DE PROGRESSION */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-mono font-semibold text-slate-400">
+                    <span>Progression</span>
+                    <span className={articleProgressPercent === 100 ? "text-emerald-400 font-bold" : "text-amber-400"}>{articleProgressPercent}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800 p-0.5">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        articleProgressPercent === 100
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                          : 'bg-gradient-to-r from-amber-500 via-orange-500 to-sky-500 animate-pulse'
+                      }`}
+                      style={{ width: `${articleProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* FENÊTRE TERMINAL SCROLLABLE */}
+                <div
+                  ref={articleLogsContainerRef}
+                  className="bg-slate-950/90 rounded-xl border border-slate-800/80 p-3.5 max-h-52 overflow-y-auto font-mono text-xs space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700"
+                >
+                  {articleLogs.map((log) => (
+                    <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+                      <span className="text-slate-500 flex-shrink-0 select-none">[{log.time}]</span>
+                      <span className={
+                        log.type === 'success' ? 'text-emerald-400 font-bold' :
+                        log.type === 'ia' ? 'text-purple-300 font-semibold' :
+                        log.type === 'theme' ? 'text-sky-300' :
+                        log.type === 'images' ? 'text-amber-300' :
+                        log.type === 'publish' ? 'text-teal-300 font-semibold' :
+                        log.type === 'error' ? 'text-rose-400 font-bold' :
+                        'text-slate-300'
+                      }>
+                        {log.text}
+                      </span>
+                    </div>
+                  ))}
+                  {articleActionRunning && (
+                    <div className="flex items-center gap-2 text-slate-500 animate-pulse pt-1">
+                      <span className="inline-block w-2 h-3.5 bg-amber-400" />
+                      <span className="text-[11px] text-slate-400">Traitement en cours...</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

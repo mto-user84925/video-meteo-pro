@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MASTER_PROMPT_ARTICLE_AND_VIDEO } from "@/app/lib/articleFormatter";
 
+// Autoriser jusqu'à 60 secondes pour la génération complète de l'article et des scènes
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   try {
     const { text, phenomenon, topic } = await req.json();
@@ -35,12 +38,16 @@ RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN
         model: "deepseek/deepseek-v4.1-flash-1017",
         messages: [
           {
+            role: "system",
+            content: "Tu es un journaliste météo-climat senior pour METEO CLIMAT PRO. Rédige de façon directe, synthétique et percutante (format article web professionnel de 400 à 600 mots) sans digression ni réflexion interminable, suivi immédiatement du script vidéo en 5 scènes (SCÈNE 1 à SCÈNE 5)."
+          },
+          {
             role: "user",
             content: promptUser
           }
         ],
         temperature: 0.3,
-        max_tokens: 3500
+        max_tokens: 4500
       })
     });
 
@@ -50,7 +57,11 @@ RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN
     }
 
     const data = await res.json();
-    const rawContent = data.choices?.[0]?.message?.content || "";
+    const rawContent = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning || "";
+
+    if (!rawContent) {
+      return NextResponse.json({ error: "Aucun texte généré par le modèle." }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,

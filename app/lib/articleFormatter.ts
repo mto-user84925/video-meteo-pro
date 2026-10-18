@@ -301,12 +301,12 @@ export function buildWordForWordArticleHtml(
 ): ParsedArticleOutput | null {
   // Extraire la partie article (avant SCÈNE 1 ou entre === DEBUT ARTICLE === et === FIN ARTICLE ===)
   let articleBlock = rawText;
-  const explicitMatch = rawText.match(/===\s*DEBUT ARTICLE\s*===([\s\S]*?)(?:===\s*FIN ARTICLE\s*===|(?=(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+1\b))/i);
-  if (explicitMatch) {
+  const explicitMatch = rawText.match(/===\s*DEBUT ARTICLE\s*===([\s\S]*?)(?:===\s*FIN ARTICLE\s*===|(?=(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+1\b)|$)/i);
+  if (explicitMatch && explicitMatch[1]?.trim()) {
     articleBlock = explicitMatch[1].trim();
   } else {
     const beforeScene1 = rawText.split(/(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+1\b/i)[0]?.trim();
-    if (beforeScene1 && beforeScene1.length > 120) {
+    if (beforeScene1 && beforeScene1.length > 60) {
       articleBlock = beforeScene1;
     } else if (/^\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+1\b/i.test(rawText.trim())) {
       // Il n'y a que les scènes vidéo dans le texte collé
@@ -315,7 +315,7 @@ export function buildWordForWordArticleHtml(
   }
 
   articleBlock = articleBlock.replace(/===\s*(?:DEBUT|FIN)\s*ARTICLE\s*===/gi, "").trim();
-  if (!articleBlock || articleBlock.length < 40) return null;
+  if (!articleBlock || articleBlock.length < 30) return null;
 
   const lines = articleBlock.split(/\r?\n/);
   let title = "";
