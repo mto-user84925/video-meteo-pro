@@ -163,6 +163,8 @@ Chaque voix off, titre, sous-titre et bandeau doit être cohérent avec le param
 
 Tu peux réutiliser un fichier avec un cadrage différent. Préserve les repères géographiques, l’échéance et la légende nécessaires à sa compréhension.
 
+- **RÈGLE OBLIGATOIRE D'INSERTION DE TOUTES LES IMAGES** : Insère impérativement dans l'article l'ensemble des images et cartes fournies (IMAGE 1, IMAGE 2, IMAGE 3, IMAGE 4, IMAGE 5... jusqu'à 10 images si fournies). Répartis-les harmonieusement entre les différentes sections pour illustrer l'intégralité des données, des échéances et des zones modélisées. Aucune carte fournie ne doit être laissée de côté.
+
 Dans chaque champ **« Image à utiliser »**, recopie le nom complet exact du fichier, extension comprise, puis précise l’échéance ou la portion à diffuser et le cadrage utile.
 
 ---
@@ -240,7 +242,9 @@ CATEGORIE : [Choisir : Actualités Météo / Analyses Climatologiques / Vigilanc
 | [Zone ou scénario 2] | [Période] | [Données disponibles] | [Risques possibles] |
 | [Zone ou scénario 3] | [Période] | [Données disponibles] | [Risques possibles] |
 
-[IMAGE 3 — Si un troisième visuel pertinent est exploitable : nom complet exact et légende complète. Sinon, supprimer cette insertion.]
+[IMAGE 3 — Si un troisième visuel pertinent est exploitable : nom complet exact et légende complète.]
+
+[IMAGE 4, IMAGE 5... JUSQU'À 10 IMAGES — Insérer impérativement toutes les autres images fournies, réparties au fil des sections (sous le tableau, après les facteurs déterminants, dans la fiabilité ou avant la conclusion), avec pour chaque image son numéro et sa légende complète.]
 
 **À ne pas interpréter comme [une certitude absolue / un seuil uniforme / une observation] :**
 
@@ -438,6 +442,108 @@ export function buildWordForWordArticleHtml(
   theme: ArticleTheme,
   imagesByRef: Record<number, { url: string; name: string }>
 ): ParsedArticleOutput | null {
+  // 1. Extraire les Voix Off du script vidéo (LIVRABLE 2 ou SCÈNE 1 à N)
+  const voiceOffByScene: Record<number, string> = {};
+  const voiceOffByFileName: Record<string, string> = {};
+  const voiceOffByImageNum: Record<number, string> = {};
+
+  const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*(\d+)[^\n]*\n([\s\S]*?)(?=(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*\d+\b|$)/gi;
+  let scMatch: RegExpExecArray | null;
+  while ((scMatch = sceneRegex.exec(rawText)) !== null) {
+    const scNum = Number(scMatch[1]);
+    const scBody = scMatch[2] || "";
+
+    const voMatch = scBody.match(/(?:^|\n)\s*[-*•]?\s*(?:\*\*)?Voix\s+off(?:\s+Charon)?[^:\n]*:\s*(?:\*\*)?\s*(?:[«"]([^»"]+)[»"]|([^\n]+(?:\n(?!(?:Bandeau|Titre|Sous-titre|Image|Dur[ée]e|SC[ÈE]NE|\*\*|[-*•]\s+(?:Bandeau|Titre|Image)))[^\n]+)*))/i);
+    let voiceText = "";
+    if (voMatch) {
+      voiceText = (voMatch[1] || voMatch[2] || "").trim().replace(/^["«]|["»]$/g, "").trim();
+    }
+
+    if (voiceText) {
+      voiceOffByScene[scNum] = voiceText;
+
+      const imgRefMatch = scBody.match(/(?:Image|Carte|Figure)\s*(?:à\s*utiliser)?\s*[:—-]?\s*(?:(?:IMAGE|CARTE|FIGURE)\s*)?(\d+)/i);
+      if (imgRefMatch && imgRefMatch[1]) {
+        voiceOffByImageNum[Number(imgRefMatch[1])] = voiceText;
+      }
+
+      const fileMatches = scBody.matchAll(/([a-zA-Z0-9_.-]+\.(?:png|jpg|jpeg|gif|webp))/gi);
+      for (const fm of fileMatches) {
+        if (fm[1]) {
+          voiceOffByFileName[fm[1].toLowerCase()] = voiceText;
+        }
+      }
+    }
+  }
+
+  function getVoiceoverForImage(imgNum: number, imgObj?: { url: string; name: string }): { voiceText: string; sceneNum?: number } | null {
+    if (imgObj?.name) {
+      const cleanImgName = imgObj.name.toLowerCase().replace(/\.[^.]+$/, "");
+      for (const [fn, vt] of Object.entries(voiceOffByFileName)) {
+        const cleanFn = fn.replace(/\.[^.]+$/, "");
+        if (cleanImgName.includes(cleanFn) || cleanFn.includes(cleanImgName) || (cleanFn.length > 8 && cleanImgName.includes(cleanFn.slice(0, 16)))) {
+          const scNum = Object.keys(voiceOffByScene).map(Number).find(s => voiceOffByScene[s] === vt);
+          return { voiceText: vt, sceneNum: scNum };
+        }
+      }
+    }
+
+    if (voiceOffByImageNum[imgNum]) {
+      const vt = voiceOffByImageNum[imgNum];
+      const scNum = Object.keys(voiceOffByScene).map(Number).find(s => voiceOffByScene[s] === vt);
+      return { voiceText: vt, sceneNum: scNum };
+    }
+
+    if (voiceOffByScene[imgNum]) {
+      return { voiceText: voiceOffByScene[imgNum], sceneNum: imgNum };
+    }
+
+    return null;
+  }
+
+  function renderVoiceoverCard(voiceInfo: { voiceText: string; sceneNum?: number } | null): string {
+    if (!voiceInfo?.voiceText) return "";
+    const sceneLabel = voiceInfo.sceneNum ? ` (Scène ${voiceInfo.sceneNum})` : "";
+    return `
+    <div style="margin-top: 12px; background: rgba(56, 189, 248, 0.12); border-left: 4px solid #38bdf8; border-radius: 6px; padding: 10px 14px; text-align: left;">
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+        <span style="font-size: 13px;">🎙️</span>
+        <span style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.06em;">Extrait Voix Off Vidéo${sceneLabel} :</span>
+      </div>
+      <p style="margin: 0; font-size: 14px; color: #f1f5f9; font-style: italic; line-height: 1.6;">
+        « ${voiceInfo.voiceText} »
+      </p>
+    </div>`;
+  }
+
+  function generateSmartCaption(fileName: string, refNum: number): string {
+    const clean = (fileName || "").replace(/\.[^.]+$/, "").toLowerCase();
+
+    if (clean.includes("geopotentiel") || clean.includes("500-hpa") || clean.includes("500hpa")) {
+      return "Géopotentiel à 500 hPa et pression au sol (Europe et Atlantique Nord) — Modélisation synoptique Météo-Climat Pro.";
+    }
+    if (clean.includes("rafales") || clean.includes("vent") || clean.includes("gust")) {
+      if (clean.includes("france")) {
+        return "Simulation des rafales maximales de vent (km/h) sur la France métropolitaine — Modèle haute résolution Météo-Climat Pro.";
+      }
+      return "Modélisation des rafales de vent et champs de pression en surface — Météo-Climat Pro.";
+    }
+    if (clean.includes("pluie") || clean.includes("precip") || clean.includes("rain") || clean.includes("cumul")) {
+      return "Modélisation des cumuls de précipitations et précipitations attendues — Météo-Climat Pro.";
+    }
+    if (clean.includes("temperature") || clean.includes("temp") || clean.includes("2m")) {
+      return "Champ des températures modélisées à 2 mètres — Météo-Climat Pro.";
+    }
+    if (clean.includes("satellite") || clean.includes("radar") || clean.includes("ir")) {
+      return "Imagerie satellite et nébulosité modélisée — Météo-Climat Pro.";
+    }
+
+    const niceName = fileName
+      ? fileName.replace(/\.[^.]+$/, "").replace(/^[a-z0-9]+_\d+_/i, "").replace(/[_-]+/g, " ")
+      : `Figure ${refNum}`;
+    return `Modélisation cartographique et analyse atmosphérique (${niceName}) — Météo-Climat Pro.`;
+  }
+
   // Extraire la partie article (avant SCÈNE 1 ou entre === DEBUT ARTICLE === et === FIN ARTICLE ===)
   let articleBlock = rawText;
   const explicitMatch = rawText.match(/===\s*DEBUT ARTICLE\s*===([\s\S]*?)(?:===\s*FIN ARTICLE\s*===|(?=(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+1\b)|$)/i);
@@ -480,6 +586,25 @@ export function buildWordForWordArticleHtml(
       continue;
     }
     bodyLines.push(lines[i]);
+  }
+
+  // Récupération des sections déterminantes si ChatGPT les a déportées à la fin du prompt
+  if (!articleBlock.toLowerCase().includes("facteurs d") && !articleBlock.toLowerCase().includes("facteur")) {
+    const factMatch = rawText.match(/(?:^|\n)\s*[-*•]?\s*(?:\*\*)?Facteurs\s+d[ée]terminants[^*:\n]*:\s*(?:\*\*)?\s*([\s\S]*?)(?=(?:Indicateurs|SC[ÈE]NE|\n\n[A-Z]|$))/i);
+    if (factMatch && factMatch[1]?.trim()) {
+      bodyLines.push("\n**🎯 LES FACTEURS DÉTERMINANTS À SURVEILLER**\n");
+      const items = factMatch[1].trim().split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith("-") || l.startsWith("*"));
+      bodyLines.push(...items);
+    }
+  }
+
+  if (!articleBlock.toLowerCase().includes("indicateurs cl") && !articleBlock.toLowerCase().includes("indicateur")) {
+    const indMatch = rawText.match(/(?:^|\n)\s*[-*•]?\s*(?:\*\*)?Indicateurs\s+cl[ée]s[^*:\n]*:\s*(?:\*\*)?\s*([\s\S]*?)(?=(?:Facteurs|SC[ÈE]NE|\n\n[A-Z]|$))/i);
+    if (indMatch && indMatch[1]?.trim()) {
+      bodyLines.push("\n**📊 PRINCIPAUX INDICATEURS CLÉS**\n");
+      const items = indMatch[1].trim().split(/\r?\n/).map(l => l.trim()).filter(l => l.startsWith("-") || l.startsWith("*"));
+      bodyLines.push(...items);
+    }
   }
 
   // Détecter les titres H1 et H2 majuscules en tête d'article (ex: SUJET COURT et SOUS-TITRE EXPLICATIF)
@@ -543,6 +668,46 @@ export function buildWordForWordArticleHtml(
   let i = bodyStartIndex;
   let hasRenderedChapeau = false;
   const usedImageRefs = new Set<number>();
+  let hasRenderedComplementary = false;
+
+  function renderComplementaryMaps(): string {
+    const allProvidedRefs = Object.keys(imagesByRef)
+      .map(Number)
+      .filter(n => imagesByRef[n]?.url)
+      .sort((a, b) => a - b);
+
+    const unusedRefs = allProvidedRefs.filter(n => !usedImageRefs.has(n));
+    if (unusedRefs.length === 0) return "";
+
+    const parts: string[] = [];
+    parts.push(`
+  <h3 style="color: ${theme.primaryDark}; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid ${theme.primaryDark}; padding-bottom: 8px;">
+    🗺️ MODÉLISATIONS CARTOGRAPHIQUES & ANALYSES COMPLÉMENTAIRES
+  </h3>
+  <p style="margin-bottom: 16px; color: #cbd5e1; font-size: 15.5px; line-height: 1.8;">
+    Retrouvez ci-dessous l'ensemble des modélisations numériques et simulations complémentaires analysées par nos météorologues pour le suivi de cette situation.
+  </p>`);
+
+    for (const refNum of unusedRefs) {
+      const imgObj = imagesByRef[refNum];
+      if (!imgObj?.url) continue;
+
+      usedImageRefs.add(refNum);
+      const voiceInfo = getVoiceoverForImage(refNum, imgObj);
+      const voiceCardHtml = renderVoiceoverCard(voiceInfo);
+      const caption = generateSmartCaption(imgObj.name, refNum);
+
+      parts.push(`
+  <div style="margin: 28px 0; text-align: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px;">
+    <img src="${imgObj.url}" alt="${caption.replace(/"/g, "&quot;")}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
+    <p style="font-size: 13.5px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
+      <strong style="background: rgba(56, 189, 248, 0.2); color: #ffffff; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11.5px; margin-right: 6px;">FIGURE ${refNum}</strong> ${caption}
+    </p>${voiceCardHtml}
+  </div>`);
+    }
+
+    return parts.join("\n");
+  }
 
   while (i < bodyLines.length) {
     const rawLine = bodyLines[i];
@@ -633,13 +798,16 @@ export function buildWordForWordArticleHtml(
         caption = matchedObj ? `Modélisation météorologique Météo-Climat Pro (${matchedObj.name.replace(/\.[^.]+$/, "")})` : `Carte météorologique — Figure ${imgNum}`;
       }
 
+      const voiceInfo = getVoiceoverForImage(imgNum, matchedObj);
+      const voiceCardHtml = renderVoiceoverCard(voiceInfo);
+
       if (matchedObj?.url) {
         htmlParts.push(`
   <div style="margin: 28px 0; text-align: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px;">
     <img src="${matchedObj.url}" alt="${caption.replace(/"/g, "&quot;")}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
     <p style="font-size: 13.5px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
       <strong style="background: rgba(56, 189, 248, 0.2); color: #ffffff; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11.5px; margin-right: 6px;">FIGURE ${imgNum}</strong> ${formatInlineMarkdown(caption, theme.primaryDark)}
-    </p>
+    </p>${voiceCardHtml}
   </div>`);
       } else {
         htmlParts.push(`
@@ -893,6 +1061,11 @@ export function buildWordForWordArticleHtml(
 
     // 14. Section "Conclusion"
     if (/^(?:\*\*)?(?:📌\s*)?Conclusion\b/i.test(line)) {
+      if (!hasRenderedComplementary) {
+        const compHtml = renderComplementaryMaps();
+        if (compHtml) htmlParts.push(compHtml);
+        hasRenderedComplementary = true;
+      }
       htmlParts.push(
         `<h3 style="color: #ffffff; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid #64748b; padding-bottom: 8px;">📌 CONCLUSION</h3>`
       );
@@ -912,6 +1085,11 @@ export function buildWordForWordArticleHtml(
 
     // 16. En résumé en 30 secondes
     if (/^(?:\*\*)?(?:⏱️\s*)?En résumé/i.test(line) || /^En résumé\s*$/i.test(line)) {
+      if (!hasRenderedComplementary) {
+        const compHtml = renderComplementaryMaps();
+        if (compHtml) htmlParts.push(compHtml);
+        hasRenderedComplementary = true;
+      }
       const inlineRest = line.replace(/^\*\*(?:⏱️\s*)?En résumé[^*]*\*\*\s*:?\s*/i, "").trim();
       const summaryParas: string[] = [];
       if (inlineRest && inlineRest !== line) summaryParas.push(inlineRest);
@@ -992,25 +1170,11 @@ export function buildWordForWordArticleHtml(
     i++;
   }
 
-  // Uniquement si AUCUNE image n'a été insérée dans le corps du texte (ex: article brut sans mention d'image)
-  if (usedImageRefs.size === 0) {
-    const remainingRefs = Object.keys(imagesByRef)
-      .map(Number)
-      .filter(n => imagesByRef[n]?.url)
-      .slice(0, 3);
-
-    if (remainingRefs.length > 0) {
-      for (const refNum of remainingRefs) {
-        const imgObj = imagesByRef[refNum];
-        htmlParts.push(`
-  <div style="margin: 28px 0; text-align: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px;">
-    <img src="${imgObj.url}" alt="Carte météorologique ${refNum}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
-    <p style="font-size: 13.5px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
-      <strong style="background: rgba(56, 189, 248, 0.2); color: #ffffff; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11.5px; margin-right: 6px;">FIGURE ${refNum}</strong> Modélisation numérique Météo-Climat Pro (${imgObj.name.replace(/\.[^.]+$/, "")})
-    </p>
-  </div>`);
-      }
-    }
+  // Garantie que 100% des images fournies sont incluses (même si 10 images)
+  if (!hasRenderedComplementary) {
+    const compHtml = renderComplementaryMaps();
+    if (compHtml) htmlParts.push(compHtml);
+    hasRenderedComplementary = true;
   }
 
   htmlParts.push(`</div>`);
