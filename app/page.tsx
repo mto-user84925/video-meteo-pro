@@ -33,6 +33,7 @@ import {
   MASTER_PROMPT_ARTICLE_AND_VIDEO,
   buildWordForWordArticleHtml,
   detectBestArticleTheme,
+  parseFullVideoScript,
   ParsedArticleOutput
 } from "./lib/articleFormatter";
 
@@ -718,79 +719,40 @@ export default function StudioMeteoPage() {
         addArticleLog(`🏷️ Catégorie : ${art.category} • Chapeau : "${art.excerpt?.slice(0, 80)}..."`, "info");
       }
 
-      // Parser les scènes
-      const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+(\d+)[^\n]*\n([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+\d+|\n\s*(?:#+\s*|\*\*)*PARTIE\s+\d+|\n\s*```|$))/gi;
-      const matches = [...raw.matchAll(sceneRegex)];
-      if (matches.length >= 2) {
-        const parsedScenes: Scene[] = matches.map((m, idx) => {
-          const sceneNum = Number(m[1]) || idx + 1;
-          const body = m[2] || "";
-          const lines = body.split("\n");
-          let badge = BADGE_PRESETS[idx % BADGE_PRESETS.length].badge;
-          let title = "";
-          let sub = "";
-          let location_tag = "";
-          let ticker = "";
-          let script_text = "";
-          let image_ref: number | undefined = undefined;
-          let image_hint: string | undefined = undefined;
-          let lastField = "";
-          for (const rawLine of lines) {
-            const line = rawLine.replace(/^\s*[-*•]+\s*/, "").replace(/\*\*/g, "").trim();
-            if (!line) continue;
-            const kv = line.match(/^([^:]+):\s*(.+)$/);
-            if (kv) {
-              const key = kv[1].trim().toLowerCase();
-              const val = kv[2].trim();
-              if (key.includes("image")) {
-                image_hint = val;
-                const numM = val.match(/image\s*(\d+)/i) || val.match(/(\d+)/);
-                if (numM) image_ref = Number(numM[1]);
-                lastField = "image";
-              } else if (key.includes("badge")) {
-                badge = val.toUpperCase();
-                lastField = "badge";
-              } else if (key.startsWith("sous-titre") || key.startsWith("sous titre")) {
-                sub = val.toUpperCase();
-                lastField = "sub";
-              } else if (key.startsWith("titre")) {
-                title = val.toUpperCase();
-                lastField = "title";
-              } else if (key.includes("localisation") || key.includes("lieu") || key.includes("région") || key.includes("region")) {
-                location_tag = val.toUpperCase();
-                lastField = "location";
-              } else if (key.includes("bandeau") || key.includes("ticker") || key.includes("infos météo")) {
-                ticker = val;
-                lastField = "ticker";
-              } else if (key.includes("voix off") || key.includes("script") || key.includes("charon") || key.includes("texte")) {
-                script_text = val;
-                lastField = "script";
-              } else if (lastField === "script") {
-                script_text += " " + line;
+      // Parser les scènes avec le moteur broadcast universel
+      const parsedVideoScenes = parseFullVideoScript(raw);
+      if (parsedVideoScenes.length >= 2) {
+        const parsedScenes: Scene[] = parsedVideoScenes.map((ps, idx) => {
+          let matchedImg: { url: string; name: string } | undefined = undefined;
+          if (ps.fileName) {
+            for (const img of Object.values(existingImagesByRef)) {
+              if (img.name.toLowerCase().includes(ps.fileName.toLowerCase()) || ps.fileName.toLowerCase().includes(img.name.toLowerCase())) {
+                matchedImg = img;
+                break;
               }
-            } else if (lastField === "script") {
-              script_text += " " + line;
             }
           }
-          const refToUse = image_ref || idx + 1;
-          const matchedImg = existingImagesByRef[refToUse];
+          if (!matchedImg) {
+            matchedImg = existingImagesByRef[ps.scene_number] || existingImagesByRef[idx + 1] || Object.values(existingImagesByRef)[idx % Math.max(1, Object.keys(existingImagesByRef).length)];
+          }
+
           return {
-            scene_number: sceneNum,
-            badge,
-            badge_color: getBadgeColor(badge, idx),
-            title,
-            sub,
-            location_tag,
-            ticker,
-            script_text: script_text.trim(),
+            scene_number: ps.scene_number,
+            badge: ps.badge,
+            badge_color: getBadgeColor(ps.badge, idx),
+            title: ps.title,
+            sub: ps.sub,
+            location_tag: ps.location_tag,
+            ticker: ps.ticker,
+            script_text: ps.script_text,
             file_url: matchedImg?.url || "",
-            file_name: matchedImg?.name || "",
-            image_ref: refToUse,
-            image_hint
+            file_name: matchedImg?.name || ps.fileName || "",
+            image_ref: ps.scene_number,
+            image_hint: ps.fileName
           };
         });
         setScenes(parsedScenes);
-        addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec voix off Charon.`, "success");
+        addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec titre, badge, bandeau et voix off Charon.`, "success");
       } else if (art) {
         // Auto-création des 5 scènes broadcast si ChatGPT s'est arrêté à la fin de l'article
         const autoScenes: Scene[] = [
@@ -1018,89 +980,43 @@ export default function StudioMeteoPage() {
 
       await new Promise(r => setTimeout(r, 150));
 
-      // B. Extraction des blocs "SCÈNE 1", "SCÈNE 2"...
-      const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+(\d+)[^\n]*\n([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+\d+|\n\s*(?:#+\s*|\*\*)*PARTIE\s+\d+|\n\s*```|$))/gi;
-      const matches = [...raw.matchAll(sceneRegex)];
-
-      if (matches.length >= 2) {
+      // B. Extraction des scènes avec le moteur broadcast universel
+      const parsedVideoScenes = parseFullVideoScript(raw);
+      if (parsedVideoScenes.length >= 2) {
         if (!isSilent) setArticleProgressPercent(75);
-        const parsedScenes: Scene[] = matches.map((m, idx) => {
-          const sceneNum = Number(m[1]) || idx + 1;
-          const body = m[2] || "";
-          const lines = body.split("\n");
-
-          let badge = BADGE_PRESETS[idx % BADGE_PRESETS.length].badge;
-          let title = "";
-          let sub = "";
-          let location_tag = "";
-          let ticker = "";
-          let script_text = "";
-          let image_ref: number | undefined = undefined;
-          let image_hint: string | undefined = undefined;
-          let lastField = "";
-
-          for (const rawLine of lines) {
-            const line = rawLine.replace(/^\s*[-*•]+\s*/, "").replace(/\*\*/g, "").trim();
-            if (!line) continue;
-
-            const kv = line.match(/^([^:]+):\s*(.+)$/);
-            if (kv) {
-              const key = kv[1].trim().toLowerCase();
-              const val = kv[2].trim();
-
-              if (key.includes("image")) {
-                image_hint = val;
-                const numM = val.match(/image\s*(\d+)/i) || val.match(/(\d+)/);
-                if (numM) image_ref = Number(numM[1]);
-                lastField = "image";
-              } else if (key.includes("badge")) {
-                badge = val.toUpperCase();
-                lastField = "badge";
-              } else if (key.startsWith("sous-titre") || key.startsWith("sous titre")) {
-                sub = val.toUpperCase();
-                lastField = "sub";
-              } else if (key.startsWith("titre")) {
-                title = val.toUpperCase();
-                lastField = "title";
-              } else if (key.includes("localisation") || key.includes("lieu") || key.includes("région") || key.includes("region")) {
-                location_tag = val.toUpperCase();
-                lastField = "location";
-              } else if (key.includes("bandeau") || key.includes("ticker") || key.includes("infos météo")) {
-                ticker = val;
-                lastField = "ticker";
-              } else if (key.includes("voix off") || key.includes("script") || key.includes("charon") || key.includes("texte")) {
-                script_text = val;
-                lastField = "script";
-              } else if (lastField === "script") {
-                script_text += " " + line;
+        const parsedScenes: Scene[] = parsedVideoScenes.map((ps, idx) => {
+          let matchedImg: { url: string; name: string } | undefined = undefined;
+          if (ps.fileName) {
+            for (const img of Object.values(existingImagesByRef)) {
+              if (img.name.toLowerCase().includes(ps.fileName.toLowerCase()) || ps.fileName.toLowerCase().includes(img.name.toLowerCase())) {
+                matchedImg = img;
+                break;
               }
-            } else if (lastField === "script") {
-              script_text += " " + line;
             }
           }
-
-          const refToUse = image_ref || idx + 1;
-          const matchedImg = existingImagesByRef[refToUse];
+          if (!matchedImg) {
+            matchedImg = existingImagesByRef[ps.scene_number] || existingImagesByRef[idx + 1] || Object.values(existingImagesByRef)[idx % Math.max(1, Object.keys(existingImagesByRef).length)];
+          }
 
           return {
-            scene_number: sceneNum,
-            badge,
-            badge_color: getBadgeColor(badge, idx),
-            title,
-            sub,
-            location_tag,
-            ticker,
-            script_text: script_text.trim(),
+            scene_number: ps.scene_number,
+            badge: ps.badge,
+            badge_color: getBadgeColor(ps.badge, idx),
+            title: ps.title,
+            sub: ps.sub,
+            location_tag: ps.location_tag,
+            ticker: ps.ticker,
+            script_text: ps.script_text,
             file_url: matchedImg?.url || "",
-            file_name: matchedImg?.name || "",
-            image_ref: refToUse,
-            image_hint
+            file_name: matchedImg?.name || ps.fileName || "",
+            image_ref: ps.scene_number,
+            image_hint: ps.fileName
           };
         });
 
         setScenes(parsedScenes);
         if (parsedScenes[0]?.title && !art?.title) setTopic(parsedScenes[0].title);
-        addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec voix off Charon.`, "success");
+        addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec titre, badge, bandeau et voix off Charon.`, "success");
 
         if (!isSilent) {
           setArticleProgressPercent(100);
