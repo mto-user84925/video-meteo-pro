@@ -401,9 +401,22 @@ Si une scène échoue à la vérification, change le visuel ou reformule son con
 Si aucun texte n’est fourni, construis l’angle éditorial à partir des seules informations lisibles dans les fichiers. Ne déduis aucune observation, vigilance officielle, intensité horaire ou chronologie qui n’y figure pas.
 `;
 
-function formatInlineMarkdown(text: string): string {
+function isMostlyUppercase(str: string): boolean {
+  const letters = str.replace(/[^a-zA-ZÀ-ÿ]/g, "");
+  if (letters.length < 4) return false;
+  const upper = str.replace(/[^A-ZÀ-Ÿ]/g, "");
+  return upper.length / letters.length >= 0.72;
+}
+
+function formatInlineMarkdown(text: string, primaryColor: string = "#38bdf8"): string {
+  if (!text) return "";
   return text
-    .replace(/\*\*([^*]+)\*\*/g, '<strong style="color: #ffffff; font-weight: 700;">$1</strong>')
+    // 1. Markdown ==surligné== ou <mark>...</mark>
+    .replace(/==([^=]+)==/g, `<mark style="background: rgba(251, 191, 36, 0.22); color: #fef08a; font-weight: 700; padding: 1px 6px; border-radius: 4px; border-bottom: 2px solid #fbbf24; box-decoration-break: clone; -webkit-box-decoration-break: clone;">$1</mark>`)
+    .replace(/<mark>([^<]+)<\/mark>/gi, `<mark style="background: rgba(251, 191, 36, 0.22); color: #fef08a; font-weight: 700; padding: 1px 6px; border-radius: 4px; border-bottom: 2px solid #fbbf24; box-decoration-break: clone; -webkit-box-decoration-break: clone;">$1</mark>`)
+    // 2. Bold **texte** transformé en gras surligné / badge broadcast
+    .replace(/\*\*([^*]+)\*\*/g, `<strong style="background: rgba(56, 189, 248, 0.16); color: #ffffff; font-weight: 700; padding: 1px 6px; border-radius: 4px; border-bottom: 2px solid ${primaryColor}; box-decoration-break: clone; -webkit-box-decoration-break: clone;">$1</strong>`)
+    // 3. Italic *texte*
     .replace(/\*([^*]+)\*/g, "<em>$1</em>");
 }
 
@@ -416,8 +429,9 @@ export interface ParsedArticleOutput {
 }
 
 /**
- * Convertit MOT POUR MOT le texte de l'article issu de ChatGPT en HTML stylé
- * selon la présentation choisie (1 à 5), en insérant automatiquement Image 1, Image 2, Image 3...
+ * Convertit MOT POUR MOT le texte de l'article issu de ChatGPT en HTML stylé broadcast
+ * selon la présentation choisie (1 à 5), avec titres en majuscules, texte en gras surligné,
+ * et insertion automatique d'Image 1, Image 2, Image 3...
  */
 export function buildWordForWordArticleHtml(
   rawText: string,
@@ -468,19 +482,42 @@ export function buildWordForWordArticleHtml(
     bodyLines.push(lines[i]);
   }
 
-  // Si le prompt n'avait pas de préfixe "TITRE SEO :", on prend le premier # Titre comme titre principal
-  if (!title) {
-    for (let i = 0; i < bodyLines.length; i++) {
-      const m = bodyLines[i].trim().match(/^#\s+(.+)$/);
-      if (m) {
-        title = m[1].replace(/\*\*/g, "").trim();
-        bodyLines.splice(i, 1);
-        break;
+  // Détecter les titres H1 et H2 majuscules en tête d'article (ex: SUJET COURT et SOUS-TITRE EXPLICATIF)
+  let topH1 = "";
+  let topH2 = "";
+  let bodyStartIndex = 0;
+
+  while (bodyStartIndex < bodyLines.length && !bodyLines[bodyStartIndex].trim()) {
+    bodyStartIndex++;
+  }
+
+  if (bodyStartIndex < bodyLines.length) {
+    const l0 = bodyLines[bodyStartIndex].trim();
+    const isL0Caps = l0.length >= 4 && l0.length <= 130 && isMostlyUppercase(l0) && !l0.startsWith("-") && !l0.startsWith("*") && !l0.startsWith("|");
+    if (l0.startsWith("# ") || isL0Caps) {
+      topH1 = l0.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim();
+      bodyStartIndex++;
+
+      while (bodyStartIndex < bodyLines.length && !bodyLines[bodyStartIndex].trim()) {
+        bodyStartIndex++;
+      }
+
+      if (bodyStartIndex < bodyLines.length) {
+        const l1 = bodyLines[bodyStartIndex].trim();
+        const isL1Caps = l1.length >= 4 && l1.length <= 160 && isMostlyUppercase(l1) && !l1.startsWith("-") && !l1.startsWith("*") && !l1.startsWith("|");
+        if (l1.startsWith("## ") || l1.startsWith("# ") || isL1Caps || /^SOUS-TITRE/i.test(l1)) {
+          topH2 = l1.replace(/^#+\s*/, "").replace(/^SOUS-TITRE(?:\s+EXPLICATIF)?\s*:\s*/i, "").replace(/\*\*/g, "").trim();
+          bodyStartIndex++;
+        }
       }
     }
   }
 
-  // Construction HTML fidèle mot pour mot
+  if (!title) {
+    title = topH1 || "Point météo et analyse synoptique — Météo-Climat Pro";
+  }
+
+  // Construction HTML fidèle mot pour mot avec présentation broadcast
   const htmlParts: string[] = [];
   htmlParts.push(
     `<div style="font-family: 'Inter', system-ui, -apple-system, sans-serif; color: #f1f5f9; line-height: 1.85; font-size: 16px;">`
@@ -491,8 +528,20 @@ export function buildWordForWordArticleHtml(
     `<div style="margin-bottom: 14px;"><span style="display: inline-block; background: ${theme.boxBgDark}; color: ${theme.primaryDark}; border: 1px solid ${theme.boxBorderDark}; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;">${theme.badge} • Météo-Climat Pro</span></div>`
   );
 
-  let i = 0;
-  let h1Count = 0;
+  if (topH1) {
+    htmlParts.push(
+      `<h1 style="color: #ffffff; font-size: 26px; font-weight: 900; line-height: 1.35; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 8px 0;">${topH1.toUpperCase()}</h1>`
+    );
+  }
+
+  if (topH2) {
+    htmlParts.push(
+      `<h2 style="color: ${theme.primaryDark}; font-size: 18px; font-weight: 800; line-height: 1.4; text-transform: uppercase; letter-spacing: 0.03em; margin: 0 0 24px 0; border-bottom: 2px solid ${theme.primaryDark}; padding-bottom: 8px;">${topH2.toUpperCase()}</h2>`
+    );
+  }
+
+  let i = bodyStartIndex;
+  let hasRenderedChapeau = false;
   const usedImageRefs = new Set<number>();
 
   while (i < bodyLines.length) {
@@ -505,10 +554,6 @@ export function buildWordForWordArticleHtml(
     }
 
     // 1. Détection universelle des balises d'insertion d'image
-    // Ex: IMAGE 1 À INSÉRER — nom.png — légende...
-    // Ex: [IMAGE 1 — Fichier : nom.png. Légende : ...]
-    // Ex: [IMAGE 1 : Légende] ou **Image 1 :** ...
-    // Ex: IMAGE 1 (sur sa propre ligne)
     let isImageTag = false;
     let imgNum: number | null = null;
     let rawCaption = "";
@@ -555,7 +600,6 @@ export function buildWordForWordArticleHtml(
         }
       }
 
-      // Nettoyer le préfixe du nom de fichier dans la légende
       caption = caption
         .replace(/^(?:IMAGE\s*\d+\s*(?:À|A)\s*INS[ÉE]RER\s*[:—-]\s*)?/i, "")
         .replace(/^(?:Fichier\s*:\s*)?[a-zA-Z0-9_.-]+\.(?:png|jpg|jpeg|gif|webp)\s*[:—-]\s*/i, "")
@@ -563,7 +607,6 @@ export function buildWordForWordArticleHtml(
         .replace(/\]$/, "")
         .trim();
 
-      // Résolution intelligente de l'image
       let matchedObj: { url: string; name: string } | undefined = undefined;
       for (const info of Object.values(imagesByRef)) {
         const cleanName = info.name.replace(/\.[^.]+$/, "");
@@ -594,21 +637,34 @@ export function buildWordForWordArticleHtml(
         htmlParts.push(`
   <div style="margin: 28px 0; text-align: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px;">
     <img src="${matchedObj.url}" alt="${caption.replace(/"/g, "&quot;")}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
-    <p style="font-size: 13px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
-      <strong style="color: #f1f5f9;">Figure ${imgNum} :</strong> ${formatInlineMarkdown(caption)}
+    <p style="font-size: 13.5px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
+      <strong style="background: rgba(56, 189, 248, 0.2); color: #ffffff; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11.5px; margin-right: 6px;">FIGURE ${imgNum}</strong> ${formatInlineMarkdown(caption, theme.primaryDark)}
     </p>
   </div>`);
       } else {
         htmlParts.push(`
   <div style="margin: 20px 0; padding: 14px; border: 1px dashed ${theme.primaryDark}; border-radius: 8px; text-align: center; color: #94a3b8; font-size: 13px;">
-    📌 Emplacement <strong>Figure ${imgNum}</strong> (${formatInlineMarkdown(caption)}) — <em>Image associée.</em>
+    📌 Emplacement <strong>FIGURE ${imgNum}</strong> (${formatInlineMarkdown(caption, theme.primaryDark)}) — <em>Image associée.</em>
   </div>`);
       }
       i++;
       continue;
     }
 
-    // 2. Tableaux Markdown (| Col 1 | Col 2 | ...)
+    // 2. Chapeau éditorial (premier paragraphe narratif de l'article)
+    if (!hasRenderedChapeau && line.length > 50 && !line.startsWith("-") && !line.startsWith("*") && !line.startsWith("|")) {
+      if (!excerpt) {
+        excerpt = line.replace(/\*\*/g, "").slice(0, 260);
+      }
+      htmlParts.push(
+        `<div style="font-size: 17px; font-weight: 500; color: #f8fafc; line-height: 1.85; background: rgba(15, 23, 42, 0.45); border-left: 4px solid ${theme.primaryDark}; border-radius: 4px; padding: 16px 20px; margin: 20px 0 26px 0;">${formatInlineMarkdown(line, theme.primaryDark)}</div>`
+      );
+      hasRenderedChapeau = true;
+      i++;
+      continue;
+    }
+
+    // 3. Tableaux Markdown (| Col 1 | Col 2 | ...)
     if (line.startsWith("|") && line.endsWith("|")) {
       const tableLines: string[] = [];
       while (i < bodyLines.length && bodyLines[i].trim().startsWith("|")) {
@@ -633,7 +689,7 @@ export function buildWordForWordArticleHtml(
     <table style="width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; background: rgba(15, 23, 42, 0.6); border-radius: 8px; overflow: hidden; border: 1px solid rgba(56, 189, 248, 0.25);">
       <thead>
         <tr style="background: ${theme.tableHeaderBgDark}; color: ${theme.primaryDark}; border-bottom: 1px solid rgba(56, 189, 248, 0.3);">
-          ${headers.map(h => `<th style="padding: 12px 14px; font-weight: 700; color: #ffffff;">${formatInlineMarkdown(h)}</th>`).join("")}
+          ${headers.map(h => `<th style="padding: 12px 14px; font-weight: 800; color: #ffffff; text-transform: uppercase; letter-spacing: 0.04em; font-size: 13px;">${formatInlineMarkdown(h, theme.primaryDark)}</th>`).join("")}
         </tr>
       </thead>
       <tbody>
@@ -643,7 +699,7 @@ export function buildWordForWordArticleHtml(
           ${r
             .map(
               (cell, cIdx) =>
-                `<td style="padding: 12px 14px; color: ${cIdx === 0 ? "#ffffff" : "#cbd5e1"}; font-weight: ${cIdx === 0 ? "600" : "400"};">${formatInlineMarkdown(cell)}</td>`
+                `<td style="padding: 12px 14px; color: ${cIdx === 0 ? "#ffffff" : "#cbd5e1"}; font-weight: ${cIdx === 0 ? "700" : "400"};">${formatInlineMarkdown(cell, theme.primaryDark)}</td>`
             )
             .join("")}
         </tr>`
@@ -657,59 +713,205 @@ export function buildWordForWordArticleHtml(
       continue;
     }
 
-    // 3. Listes à puces (- ... ou * ... ou • ...)
+    // 4. Listes à puces avec surlignage des indicateurs clés
     if (/^[-*•]\s+/.test(line)) {
       const items: string[] = [];
       while (i < bodyLines.length && /^[-*•]\s+/.test(bodyLines[i].trim())) {
-        items.push(bodyLines[i].trim().replace(/^[-*•]\s+/, ""));
+        let it = bodyLines[i].trim().replace(/^[-*•]\s+/, "");
+        const colonMatch = it.match(/^([^:]{3,65})\s*:\s*(.+)$/);
+        if (colonMatch && !colonMatch[1].includes("**") && !colonMatch[1].includes("<strong")) {
+          it = `**${colonMatch[1].trim()} :** ${colonMatch[2].trim()}`;
+        } else {
+          const numPrefixMatch = it.match(/^((?:Jusqu'à\s+)?\d+(?:\s*(?:à|-)\s*\d+)?\s*(?:km\/h|mm|hPa|°C|degrés)[^.,;:]*?)(?:[,—:]|\s{2,}|\b)\s*(.*)$/i);
+          if (numPrefixMatch && !it.includes("**") && !it.includes("<strong")) {
+            it = `**${numPrefixMatch[1].trim()}** — ${numPrefixMatch[2].trim()}`;
+          }
+        }
+        items.push(it);
         i++;
       }
       htmlParts.push(`
   <div style="background: ${theme.boxBgDark}; border-left: 5px solid ${theme.boxBorderDark}; border-radius: 8px; padding: 18px 22px; margin: 22px 0;">
-    <ul style="margin: 0; padding-left: 20px; color: #f1f5f9; font-size: 15px; line-height: 1.8;">
-      ${items.map(it => `<li style="margin-bottom: 8px; color: #cbd5e1;">${formatInlineMarkdown(it)}</li>`).join("")}
+    <ul style="margin: 0; padding-left: 20px; color: #f1f5f9; font-size: 15.5px; line-height: 1.85;">
+      ${items.map(it => `<li style="margin-bottom: 8px; color: #cbd5e1;">${formatInlineMarkdown(it, theme.primaryDark)}</li>`).join("")}
     </ul>
   </div>`);
       continue;
     }
 
-    // 4. Titres Markdown # / ## / ###
-    if (line.startsWith("# ")) {
-      const hText = line.replace(/^#\s+/, "").trim();
-      h1Count++;
-      if (h1Count === 1) {
-        htmlParts.push(
-          `<h2 style="color: ${theme.accentDark}; font-size: 14px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 8px; margin-bottom: 4px;">${formatInlineMarkdown(hText)}</h2>`
-        );
-      } else {
-        htmlParts.push(
-          `<h2 style="color: #ffffff; font-size: 23px; font-weight: 800; line-height: 1.35; margin-top: 4px; margin-bottom: 20px;">${formatInlineMarkdown(hText)}</h2>`
-        );
+    // 5. NIVEAU 1 / NIVEAU 2 / NIVEAU 3 (Alertes & Scénarios Pédagogiques)
+    const niveauMatch = line.match(/^(?:\*\*)?NIVEAU\s*([123])\s*[-—:]\s*(.+?)(?:\*\*)?$/i);
+    if (niveauMatch) {
+      const lvl = niveauMatch[1];
+      const nTitle = niveauMatch[2].replace(/\*\*/g, "").trim();
+      i++;
+      const descLines: string[] = [];
+      while (
+        i < bodyLines.length &&
+        bodyLines[i].trim() &&
+        !/^(?:\*\*)?NIVEAU\s*[123]/i.test(bodyLines[i].trim()) &&
+        !bodyLines[i].trim().startsWith("#") &&
+        !bodyLines[i].trim().startsWith("|") &&
+        !bodyLines[i].trim().startsWith("-") &&
+        !isMostlyUppercase(bodyLines[i].trim())
+      ) {
+        descLines.push(bodyLines[i].trim());
+        i++;
       }
-      i++;
+      const descText = descLines.join(" ") || "";
+      const lvlColors = {
+        "1": { bg: "rgba(34, 197, 94, 0.12)", border: "#22c55e", text: "#4ade80", icon: "🟢" },
+        "2": { bg: "rgba(245, 158, 11, 0.14)", border: "#f59e0b", text: "#fbbf24", icon: "🟠" },
+        "3": { bg: "rgba(239, 68, 68, 0.16)", border: "#ef4444", text: "#f87171", icon: "🔴" }
+      };
+      const c = lvlColors[lvl as "1" | "2" | "3"] || lvlColors["1"];
+      htmlParts.push(`
+  <div style="background: ${c.bg}; border-left: 5px solid ${c.border}; border-radius: 8px; padding: 16px 20px; margin: 18px 0;">
+    <div style="font-weight: 900; color: ${c.text}; text-transform: uppercase; font-size: 15px; letter-spacing: 0.05em; margin-bottom: 6px;">
+      ${c.icon} NIVEAU ${lvl} — ${nTitle.toUpperCase()}
+    </div>
+    ${descText ? `<div style="color: #f1f5f9; font-size: 15.5px; line-height: 1.75;">${formatInlineMarkdown(descText, theme.primaryDark)}</div>` : ""}
+  </div>`);
       continue;
     }
 
-    if (line.startsWith("## ")) {
-      const h2Text = line.replace(/^##\s+/, "").trim();
+    // 6. Section "Comprendre [le phénomène ou le mécanisme physique]"
+    if (/^(?:\*\*)?(?:🔬\s*)?Comprendre\b/i.test(line)) {
+      const clean = line.replace(/^\*\*/, "").replace(/\*\*$/, "").replace(/^🔬\s*/, "").trim();
       htmlParts.push(
-        `<h3 style="color: ${theme.primaryDark}; font-size: 20px; font-weight: 700; margin-top: 30px; margin-bottom: 12px; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 6px;">${formatInlineMarkdown(h2Text)}</h3>`
+        `<h3 style="color: #38bdf8; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 8px;">🔬 ${clean.toUpperCase()}</h3>`
       );
       i++;
       continue;
     }
 
-    if (line.startsWith("### ")) {
-      const h3Text = line.replace(/^###\s+/, "").trim();
+    // 7. Section "Les conséquences concrètes sur la population, les routes et les chantiers BTP"
+    if (/^(?:\*\*)?(?:🏗️\s*)?Les conséquences\b/i.test(line)) {
+      const clean = line.replace(/^\*\*/, "").replace(/\*\*$/, "").replace(/^🏗️\s*/, "").trim();
       htmlParts.push(
-        `<h4 style="color: #ffffff; font-size: 17px; font-weight: 700; margin-top: 20px; margin-bottom: 8px;">${formatInlineMarkdown(h3Text)}</h4>`
+        `<h3 style="color: #fbbf24; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid rgba(251, 191, 36, 0.35); padding-bottom: 8px;">🏗️ ${clean.toUpperCase()}</h3>`
       );
       i++;
       continue;
     }
 
-    // 5. Détection spéciale "En résumé" ou "À ne pas interpréter comme"
-    if (/^\*\*(?:⏱️\s*)?En résumé/i.test(line) || /^En résumé\s*$/i.test(line)) {
+    // 8. Section "TROIS SITUATIONS À SURVEILLER" / "SCÉNARIOS"
+    if (/^(?:\*\*)?(?:TROIS SITUATIONS|3 SITUATIONS|SC[ÉE]NARIOS|NIVEAUX DE RISQUE)\b/i.test(line)) {
+      const clean = line.replace(/^\*\*/, "").replace(/\*\*$/, "").replace(/^[⚠️📊]\s*/, "").trim();
+      htmlParts.push(
+        `<h3 style="color: ${theme.primaryDark}; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid ${theme.primaryDark}; padding-bottom: 8px;">⚠️ ${clean.toUpperCase()}</h3>`
+      );
+      i++;
+      continue;
+    }
+
+    // 9. Section "À ne pas interpréter comme..."
+    if (/^(?:\*\*)?(?:⚠️\s*)?À ne pas interpréter\b/i.test(line)) {
+      const clean = line.replace(/^\*\*/, "").replace(/\*\*$/, "").replace(/^⚠️\s*/, "").trim();
+      i++;
+      const warningParas: string[] = [];
+      while (
+        i < bodyLines.length &&
+        bodyLines[i].trim() &&
+        !bodyLines[i].trim().startsWith("#") &&
+        !bodyLines[i].trim().startsWith("|") &&
+        !bodyLines[i].trim().startsWith("-") &&
+        !/^(?:\*\*)?(?:Les\s*\d+\s*facteurs|Fiabilité|FAQ|Conclusion|En résumé)/i.test(bodyLines[i].trim())
+      ) {
+        warningParas.push(bodyLines[i].trim());
+        i++;
+      }
+      htmlParts.push(`
+  <div style="background: rgba(245, 158, 11, 0.14); border: 1px solid rgba(245, 158, 11, 0.4); border-left: 5px solid #fbbf24; border-radius: 8px; padding: 18px 22px; margin: 28px 0;">
+    <div style="font-weight: 900; color: #fbbf24; text-transform: uppercase; font-size: 15px; letter-spacing: 0.05em; margin-bottom: 8px;">
+      ⚠️ ${clean.toUpperCase()}
+    </div>
+    <p style="font-size: 15px; color: #fef3c7; margin: 0; line-height: 1.75;">
+      ${warningParas.map(p => formatInlineMarkdown(p, theme.primaryDark)).join("<br/><br/>")}
+    </p>
+  </div>`);
+      continue;
+    }
+
+    // 10. Section "Les 4 facteurs déterminants à surveiller"
+    if (/^(?:\*\*)?(?:🎯\s*)?Les\s*\d+\s*facteurs\b/i.test(line)) {
+      const clean = line.replace(/^\*\*/, "").replace(/\*\*$/, "").replace(/^🎯\s*/, "").trim();
+      htmlParts.push(
+        `<h3 style="color: ${theme.primaryDark}; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid ${theme.primaryDark}; padding-bottom: 8px;">🎯 ${clean.toUpperCase()}</h3>`
+      );
+      i++;
+      continue;
+    }
+
+    // 11. Section "Fiabilité des prévisions et échéances"
+    if (/^(?:\*\*)?(?:📊\s*)?Fiabilité des prévisions\b/i.test(line)) {
+      const clean = line.replace(/^\*\*/, "").replace(/\*\*$/, "").replace(/^📊\s*/, "").trim();
+      htmlParts.push(
+        `<h3 style="color: ${theme.primaryDark}; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid ${theme.primaryDark}; padding-bottom: 8px;">📊 ${clean.toUpperCase()}</h3>`
+      );
+      i++;
+      continue;
+    }
+
+    // 12. Section "FAQ sur..." / "Foire aux questions"
+    if (/^(?:\*\*)?(?:❓\s*)?(?:FAQ|Foire aux questions)\b/i.test(line)) {
+      const clean = line.replace(/^\*\*/, "").replace(/\*\*$/, "").replace(/^❓\s*/, "").trim();
+      htmlParts.push(
+        `<h3 style="color: ${theme.accentDark}; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid ${theme.accentDark}; padding-bottom: 8px;">❓ ${clean.toUpperCase()}</h3>`
+      );
+      i++;
+      continue;
+    }
+
+    // 13. Questions FAQ (ex: 1. Une tempête est-elle certaine... ?)
+    const faqQMatch = line.match(/^(?:\*\*)?(\d+)\.\s*([^?]+(?:\?|:))\s*(?:\*\*)?$/i);
+    if (faqQMatch) {
+      const qNum = faqQMatch[1];
+      const qText = faqQMatch[2].trim();
+      i++;
+      const ansLines: string[] = [];
+      while (
+        i < bodyLines.length &&
+        bodyLines[i].trim() &&
+        !/^(?:\*\*)?\d+\.\s*[^?]+(?:\?|:)/i.test(bodyLines[i].trim()) &&
+        !bodyLines[i].trim().startsWith("#") &&
+        !/^(?:\*\*)?(?:Conclusion|En résumé)/i.test(bodyLines[i].trim())
+      ) {
+        ansLines.push(bodyLines[i].trim());
+        i++;
+      }
+      const ansText = ansLines.join(" ") || "";
+      htmlParts.push(`
+  <div style="background: rgba(15, 23, 42, 0.55); border: 1px solid rgba(56, 189, 248, 0.25); border-left: 4px solid ${theme.primaryDark}; border-radius: 8px; padding: 14px 18px; margin: 16px 0;">
+    <div style="font-weight: 800; color: #38bdf8; font-size: 16px; margin-bottom: 6px;">
+      ❓ ${qNum}. ${qText}
+    </div>
+    ${ansText ? `<div style="color: #e2e8f0; font-size: 15px; line-height: 1.75;">${formatInlineMarkdown(ansText, theme.primaryDark)}</div>` : ""}
+  </div>`);
+      continue;
+    }
+
+    // 14. Section "Conclusion"
+    if (/^(?:\*\*)?(?:📌\s*)?Conclusion\b/i.test(line)) {
+      htmlParts.push(
+        `<h3 style="color: #ffffff; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid #64748b; padding-bottom: 8px;">📌 CONCLUSION</h3>`
+      );
+      i++;
+      continue;
+    }
+
+    // 15. Zone & Période
+    if (/^(?:\*|_)?Zone\s*\/\s*p[ée]riode\s*:\s*(.+?)(?:\*|_)?$/i.test(line)) {
+      const zp = line.replace(/^(?:\*|_)?Zone\s*\/\s*p[ée]riode\s*:\s*/i, "").replace(/[*_]$/, "").trim();
+      htmlParts.push(
+        `<div style="font-size: 13.5px; color: ${theme.primaryDark}; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin: -6px 0 14px 0;">📍 ZONE & PÉRIODE : ${zp.toUpperCase()}</div>`
+      );
+      i++;
+      continue;
+    }
+
+    // 16. En résumé en 30 secondes
+    if (/^(?:\*\*)?(?:⏱️\s*)?En résumé/i.test(line) || /^En résumé\s*$/i.test(line)) {
       const inlineRest = line.replace(/^\*\*(?:⏱️\s*)?En résumé[^*]*\*\*\s*:?\s*/i, "").trim();
       const summaryParas: string[] = [];
       if (inlineRest && inlineRest !== line) summaryParas.push(inlineRest);
@@ -726,66 +928,71 @@ export function buildWordForWordArticleHtml(
       }
       htmlParts.push(`
   <div style="background: ${theme.summaryBgDark}; border: 1px solid ${theme.summaryBorderDark}; border-radius: 10px; padding: 20px 24px; margin: 30px 0;">
-    <h4 style="color: ${theme.primaryDark}; font-size: 17px; margin-top: 0; margin-bottom: 10px; text-transform: uppercase; font-weight: 800;">⏱️ En résumé en 30 secondes</h4>
+    <h4 style="color: ${theme.primaryDark}; font-size: 17px; margin-top: 0; margin-bottom: 10px; text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em;">⏱️ EN RÉSUMÉ EN 30 SECONDES</h4>
     <p style="font-size: 15px; color: #f1f5f9; margin: 0; line-height: 1.75;">
-      ${summaryParas.map(p => formatInlineMarkdown(p)).join("<br/><br/>")}
+      ${summaryParas.map(p => formatInlineMarkdown(p, theme.primaryDark)).join("<br/><br/>")}
     </p>
   </div>`);
       continue;
     }
 
-    if (/^\*\*À ne pas interpréter comme/i.test(line)) {
-      const warningLines: string[] = [line];
+    // 17. Ligne isolée en TOUTES MAJUSCULES (ex: VENTS FORTS ET PLUIES : LES PRINCIPAUX INDICATEURS)
+    if (isMostlyUppercase(line) && line.length <= 110 && !line.startsWith("-") && !line.startsWith("*") && !line.startsWith("|")) {
+      const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim();
+      htmlParts.push(
+        `<h3 style="color: ${theme.primaryDark}; font-size: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 34px 0 12px 0; border-bottom: 1px solid rgba(56, 189, 248, 0.25); padding-bottom: 6px;">${clean.toUpperCase()}</h3>`
+      );
       i++;
-      while (
-        i < bodyLines.length &&
-        bodyLines[i].trim() &&
-        !bodyLines[i].trim().startsWith("#") &&
-        !/^\*\*[^*]+\*\*$/.test(bodyLines[i].trim())
-      ) {
-        warningLines.push(bodyLines[i].trim());
-        i++;
-      }
-      htmlParts.push(`
-  <div style="background: rgba(245, 158, 11, 0.15); border-left: 4px solid #fbbf24; border-radius: 8px; padding: 18px 22px; margin: 26px 0;">
-    <p style="font-size: 14.5px; color: #fef3c7; margin: 0; line-height: 1.75;">
-      ${warningLines.map(w => formatInlineMarkdown(w)).join("<br/>")}
-    </p>
-  </div>`);
       continue;
     }
 
-    // 6. Intertitre en gras seul sur une ligne : **[Intertitre]**
+    // 18. Titres Markdown # / ## / ###
+    if (line.startsWith("# ")) {
+      const hText = line.replace(/^#\s+/, "").trim();
+      htmlParts.push(
+        `<h2 style="color: #ffffff; font-size: 23px; font-weight: 900; line-height: 1.35; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 32px; margin-bottom: 16px;">${hText.toUpperCase()}</h2>`
+      );
+      i++;
+      continue;
+    }
+
+    if (line.startsWith("## ")) {
+      const h2Text = line.replace(/^##\s+/, "").trim();
+      htmlParts.push(
+        `<h3 style="color: ${theme.primaryDark}; font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 30px; margin-bottom: 12px; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 6px;">${h2Text.toUpperCase()}</h3>`
+      );
+      i++;
+      continue;
+    }
+
+    if (line.startsWith("### ")) {
+      const h3Text = line.replace(/^###\s+/, "").trim();
+      htmlParts.push(
+        `<h4 style="color: #ffffff; font-size: 17px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 22px; margin-bottom: 8px;">${h3Text.toUpperCase()}</h4>`
+      );
+      i++;
+      continue;
+    }
+
+    // 19. Intertitre en gras seul sur une ligne : **[Intertitre]**
     const boldHeadingMatch = line.match(/^\*\*([^*]+)\*\*$/);
     if (boldHeadingMatch) {
       const headingText = boldHeadingMatch[1].trim();
-      // Si c'est NIVEAU 1 / 2 / 3 ou une question de FAQ (finit par ?)
-      if (/^NIVEAU\s+\d/i.test(headingText) || headingText.endsWith("?")) {
-        htmlParts.push(
-          `<h4 style="color: ${theme.accentDark}; font-size: 16.5px; font-weight: 700; margin-top: 18px; margin-bottom: 6px;">${headingText}</h4>`
-        );
-      } else {
-        htmlParts.push(
-          `<h3 style="color: ${theme.primaryDark}; font-size: 20px; font-weight: 700; margin-top: 32px; margin-bottom: 12px; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 6px;">${headingText}</h3>`
-        );
-      }
+      htmlParts.push(
+        `<h3 style="color: ${theme.primaryDark}; font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 32px; margin-bottom: 12px; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 6px;">${headingText.toUpperCase()}</h3>`
+      );
       i++;
       continue;
     }
 
-    // 7. Paragraphe standard (reprise exacte mot pour mot)
-    if (!excerpt && line.length > 60 && !line.startsWith("*") && !line.startsWith("#")) {
-      excerpt = line.replace(/\*\*/g, "").slice(0, 260);
-    }
-
+    // 20. Paragraphe standard mot pour mot
     htmlParts.push(
-      `<p style="margin-bottom: 16px; color: #cbd5e1; font-size: 16px; line-height: 1.85;">${formatInlineMarkdown(line)}</p>`
+      `<p style="margin-bottom: 16px; color: #cbd5e1; font-size: 16px; line-height: 1.85;">${formatInlineMarkdown(line, theme.primaryDark)}</p>`
     );
     i++;
   }
 
-  // Uniquement si AUCUNE image n'a été insérée dans le corps du texte (ex: article brut sans aucune mention d'image),
-  // on insère alors les cartes disponibles à la fin pour qu'elles restent visibles (maximum 3 cartes)
+  // Uniquement si AUCUNE image n'a été insérée dans le corps du texte (ex: article brut sans mention d'image)
   if (usedImageRefs.size === 0) {
     const remainingRefs = Object.keys(imagesByRef)
       .map(Number)
@@ -798,8 +1005,8 @@ export function buildWordForWordArticleHtml(
         htmlParts.push(`
   <div style="margin: 28px 0; text-align: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px;">
     <img src="${imgObj.url}" alt="Carte météorologique ${refNum}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
-    <p style="font-size: 13px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
-      <strong style="color: #f1f5f9;">Figure ${refNum} :</strong> Modélisation numérique Météo-Climat Pro (${imgObj.name.replace(/\.[^.]+$/, "")})
+    <p style="font-size: 13.5px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
+      <strong style="background: rgba(56, 189, 248, 0.2); color: #ffffff; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11.5px; margin-right: 6px;">FIGURE ${refNum}</strong> Modélisation numérique Météo-Climat Pro (${imgObj.name.replace(/\.[^.]+$/, "")})
     </p>
   </div>`);
       }
