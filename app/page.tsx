@@ -586,6 +586,77 @@ export default function StudioMeteoPage() {
         });
         setScenes(parsedScenes);
         addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec voix off Charon.`, "success");
+      } else if (art) {
+        // Auto-création des 5 scènes broadcast si ChatGPT s'est arrêté à la fin de l'article
+        const autoScenes: Scene[] = [
+          {
+            scene_number: 1,
+            badge: "CHANGEMENT MÉTÉO",
+            badge_color: BADGE_PRESETS[0].color,
+            title: (art.title || "PLUIE ET VENT EN VUE").slice(0, 32).toUpperCase(),
+            sub: "RETOUR DES PERTURBATIONS",
+            location_tag: "FRANCE / NORD",
+            ticker: (art.excerpt || "Retour des perturbations océaniques.").slice(0, 75),
+            script_text: "Attention, changement météo en vue avec le retour des pluies et du vent !",
+            file_url: existingImagesByRef[1]?.url || "",
+            file_name: existingImagesByRef[1]?.name || "",
+            image_ref: 1
+          },
+          {
+            scene_number: 2,
+            badge: "ANALYSE SYNOPTIQUE",
+            badge_color: BADGE_PRESETS[1].color,
+            title: "FLUX OCÉANIQUE ACTIF",
+            sub: "RECUL DE L'ANTICYCLONE",
+            location_tag: "ATLANTIQUE NORD",
+            ticker: "Vaste creux dépressionnaire atlantique repoussant l'anticyclone.",
+            script_text: "En altitude, les dépressions atlantiques repoussent l'anticyclone et ouvrent la voie aux perturbations.",
+            file_url: existingImagesByRef[2]?.url || "",
+            file_name: existingImagesByRef[2]?.name || "",
+            image_ref: 2
+          },
+          {
+            scene_number: 3,
+            badge: "CHRONOLOGIE",
+            badge_color: BADGE_PRESETS[2].color,
+            title: "DÉGRADATION PROGRESSIVE",
+            sub: "DE MERCREDI À VENDREDI",
+            location_tag: "OUEST PUIS NORD",
+            ticker: "Les pluies gagnent la Bretagne et la Normandie avant de traverser le pays.",
+            script_text: "Les premières pluies touchent l'ouest dès mercredi, avant de s'étendre au nord et au centre jeudi et vendredi.",
+            file_url: existingImagesByRef[3]?.url || existingImagesByRef[1]?.url || "",
+            file_name: existingImagesByRef[3]?.name || existingImagesByRef[1]?.name || "",
+            image_ref: 3
+          },
+          {
+            scene_number: 4,
+            badge: "RISQUE VENTEUX",
+            badge_color: BADGE_PRESETS[3].color,
+            title: "COUP DE VENT EN VUE",
+            sub: "VENDREDI SOUS SURVEILLANCE",
+            location_tag: "MANCHE / LITTORAL",
+            ticker: "Rafales à plus de 100 km/h en mer et 80 km/h dans les terres possibles.",
+            script_text: "Un risque de coup de vent est envisagé vendredi, avec de fortes rafales près des côtes et dans les terres.",
+            file_url: existingImagesByRef[2]?.url || existingImagesByRef[1]?.url || "",
+            file_name: existingImagesByRef[2]?.name || existingImagesByRef[1]?.name || "",
+            image_ref: 2
+          },
+          {
+            scene_number: 5,
+            badge: "PRUDENCE & SUIVI",
+            badge_color: BADGE_PRESETS[4].color,
+            title: "ÉVOLUTION À SUIVRE",
+            sub: "BULLETINS ACTUALISÉS",
+            location_tag: "TOUTES RÉGIONS",
+            ticker: "Restez connectés avec nos prévisions réactualisées.",
+            script_text: "Adaptez vos déplacements et activités extérieures, et restez connectés avec METEO CLIMAT PRO.",
+            file_url: existingImagesByRef[1]?.url || "",
+            file_name: existingImagesByRef[1]?.name || "",
+            image_ref: 1
+          }
+        ];
+        setScenes(autoScenes);
+        addArticleLog(`🎬 5 scènes vidéo adaptées automatiquement à partir de l'article pour votre régie vidéo.`, "success");
       }
 
       setArticleProgressPercent(55);
@@ -595,7 +666,7 @@ export default function StudioMeteoPage() {
         addArticleLog("⚠️ Aucun article web complet détecté dans le texte (uniquement scènes vidéo).", "error");
         addArticleLog("💡 Pour publier sur les sites, collez le texte contenant l'article web (avec === DEBUT ARTICLE ===) ou utilisez 'Rédiger avec DeepSeek'.", "info");
         setArticleProgressPercent(100);
-        alert("Attention : Le texte collé ne contient pas d'article web complet (uniquement des scènes vidéo). Les scènes ont été chargées, mais aucun article n'a été publié en ligne.");
+        alert("Attention : Le texte collé ne contient pas d'article web complet. Pour publier l'article sur les 3 sites, collez le texte de l'article (avec === DEBUT ARTICLE ===) ou utilisez DeepSeek.");
         return;
       }
 
@@ -831,9 +902,78 @@ export default function StudioMeteoPage() {
       }
 
       if (art) {
+        const autoScenes: Scene[] = [
+          {
+            scene_number: 1,
+            badge: "CHANGEMENT MÉTÉO",
+            badge_color: BADGE_PRESETS[0].color,
+            title: (art.title || "PLUIE ET VENT EN VUE").slice(0, 32).toUpperCase(),
+            sub: "RETOUR DES PERTURBATIONS",
+            location_tag: "FRANCE / NORD",
+            ticker: (art.excerpt || "Retour des perturbations océaniques.").slice(0, 75),
+            script_text: "Attention, changement météo en vue avec le retour des pluies et du vent !",
+            file_url: existingImagesByRef[1]?.url || "",
+            file_name: existingImagesByRef[1]?.name || "",
+            image_ref: 1
+          },
+          {
+            scene_number: 2,
+            badge: "ANALYSE SYNOPTIQUE",
+            badge_color: BADGE_PRESETS[1].color,
+            title: "FLUX OCÉANIQUE ACTIF",
+            sub: "RECUL DE L'ANTICYCLONE",
+            location_tag: "ATLANTIQUE NORD",
+            ticker: "Vaste creux dépressionnaire atlantique repoussant l'anticyclone.",
+            script_text: "En altitude, les dépressions atlantiques repoussent l'anticyclone et ouvrent la voie aux perturbations.",
+            file_url: existingImagesByRef[2]?.url || "",
+            file_name: existingImagesByRef[2]?.name || "",
+            image_ref: 2
+          },
+          {
+            scene_number: 3,
+            badge: "CHRONOLOGIE",
+            badge_color: BADGE_PRESETS[2].color,
+            title: "DÉGRADATION PROGRESSIVE",
+            sub: "DE MERCREDI À VENDREDI",
+            location_tag: "OUEST PUIS NORD",
+            ticker: "Les pluies gagnent la Bretagne et la Normandie avant de traverser le pays.",
+            script_text: "Les premières pluies touchent l'ouest dès mercredi, avant de s'étendre au nord et au centre jeudi et vendredi.",
+            file_url: existingImagesByRef[3]?.url || existingImagesByRef[1]?.url || "",
+            file_name: existingImagesByRef[3]?.name || existingImagesByRef[1]?.name || "",
+            image_ref: 3
+          },
+          {
+            scene_number: 4,
+            badge: "RISQUE VENTEUX",
+            badge_color: BADGE_PRESETS[3].color,
+            title: "COUP DE VENT EN VUE",
+            sub: "VENDREDI SOUS SURVEILLANCE",
+            location_tag: "MANCHE / LITTORAL",
+            ticker: "Rafales à plus de 100 km/h en mer et 80 km/h dans les terres possibles.",
+            script_text: "Un risque de coup de vent est envisagé vendredi, avec de fortes rafales près des côtes et dans les terres.",
+            file_url: existingImagesByRef[2]?.url || existingImagesByRef[1]?.url || "",
+            file_name: existingImagesByRef[2]?.name || existingImagesByRef[1]?.name || "",
+            image_ref: 2
+          },
+          {
+            scene_number: 5,
+            badge: "PRUDENCE & SUIVI",
+            badge_color: BADGE_PRESETS[4].color,
+            title: "ÉVOLUTION À SUIVRE",
+            sub: "BULLETINS ACTUALISÉS",
+            location_tag: "TOUTES RÉGIONS",
+            ticker: "Restez connectés avec nos prévisions réactualisées.",
+            script_text: "Adaptez vos déplacements et activités extérieures, et restez connectés avec METEO CLIMAT PRO.",
+            file_url: existingImagesByRef[1]?.url || "",
+            file_name: existingImagesByRef[1]?.name || "",
+            image_ref: 1
+          }
+        ];
+        setScenes(autoScenes);
         setArticleProgressPercent(100);
-        addArticleLog("🎉 Article web structuré mot pour mot ! Prêt pour la publication sur les 3 sites.", "success");
-        setImportSuccessMessage(`✅ L'article web complet a été structuré mot pour mot dans la présentation « ${activeTheme.badge} » !`);
+        addArticleLog("🎉 Article web structuré mot pour mot + 5 scènes vidéo adaptées pour la régie !", "success");
+        addArticleLog("👉 Cliquez sur '🚀 Charger & Publier DIRECTEMENT sur les 3 sites' pour mettre en ligne.", "publish");
+        setImportSuccessMessage(`✅ L'article web complet a été structuré mot pour mot dans la présentation « ${activeTheme.badge} » et 5 scènes vidéo ont été préparées !`);
         return art;
       }
 
