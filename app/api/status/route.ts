@@ -58,6 +58,38 @@ export async function GET(req: Request) {
       const pr = await fetch(`${SUPABASE_URL}/storage/v1/object/public/blog-images/renders/${sessionId}/progress.json?t=${Date.now()}`, { cache: "no-store" });
       if (pr.ok) progress = await pr.json();
     } catch (_) {}
+
+    // Recherche des fichiers d'avancement incrémentaux p_... si présents
+    try {
+      const listRes = await fetch(`${SUPABASE_URL}/storage/v1/object/list/blog-images`, {
+        method: "POST",
+        headers: {
+          "apikey": process.env.SUPABASE_KEY || "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
+          "Authorization": `Bearer ${process.env.SUPABASE_KEY || "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP"}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          prefix: `renders/${sessionId}/`,
+          limit: 30,
+          sortBy: { column: "name", order: "desc" }
+        }),
+        cache: "no-store"
+      });
+      if (listRes.ok) {
+        const files: Array<{ name: string }> = await listRes.json();
+        const pFiles = files.filter(f => f.name.startsWith("p_")).sort((a, b) => b.name.localeCompare(a.name));
+        if (pFiles.length > 0) {
+          const pFetch = await fetch(`${SUPABASE_URL}/storage/v1/object/public/blog-images/renders/${sessionId}/${pFiles[0].name}?t=${Date.now()}`, { cache: "no-store" });
+          if (pFetch.ok) {
+            const pData = await pFetch.json();
+            if (!progress || (pData.pct && pData.pct >= (progress.pct || 0))) {
+              progress = pData;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
     return NextResponse.json({ status: "processing", step: progress?.text || "Régie vidéo en cours d'encodage...", progress });
   } catch (error: any) {
     return NextResponse.json({ status: "processing", step: "En cours d'encodage..." });

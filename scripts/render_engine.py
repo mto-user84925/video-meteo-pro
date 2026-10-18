@@ -131,7 +131,23 @@ def upload_supabase(local_file, remote_path, content_type="video/mp4"):
 def progress(session_id, pct, text, kind="info"):
     """Publie l'avancement réel (lu par /api/status puis affiché dans le journal)."""
     print(f"[{pct}%] {text}")
-    data = json.dumps({"pct": pct, "text": text, "type": kind, "ts": int(time.time())}).encode("utf-8")
+    now_ts = int(time.time())
+    data = json.dumps({"pct": pct, "text": text, "type": kind, "ts": now_ts}).encode("utf-8")
+
+    # 1. Envoi sous un nom unique incrémental p_{pct:03d}_{ts}.json (POST neuf garanti sans conflit RLS)
+    try:
+        req_p = urllib.request.Request(
+            f"{SUPABASE_URL}/storage/v1/object/blog-images/renders/{session_id}/p_{pct:03d}_{now_ts}.json",
+            data=data,
+            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                     "Content-Type": "application/json"},
+            method="POST"
+        )
+        urllib.request.urlopen(req_p, timeout=10).read()
+    except Exception:
+        pass
+
+    # 2. Tentative sur progress.json
     for method in ("POST", "PUT"):
         try:
             req = urllib.request.Request(
@@ -141,11 +157,10 @@ def progress(session_id, pct, text, kind="info"):
                          "Content-Type": "application/json"},
                 method=method
             )
-            urllib.request.urlopen(req, timeout=15).read()
+            urllib.request.urlopen(req, timeout=10).read()
             return
-        except Exception as e:
-            err = e
-    print(f"⚠️ progress non publié : {err}")
+        except Exception:
+            pass
 
 def tts_charon(text, out_wav):
     url = "https://openrouter.ai/api/v1/audio/speech"
