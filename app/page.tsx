@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon, Terminal, Plus, Trash2, Clock } from "lucide-react";
+import { Sparkles, Video, Download, Upload, CheckCircle2, ShieldCheck, RefreshCw, Play, Link as LinkIcon, ExternalLink, Image as ImageIcon, Terminal, Plus, Trash2, Clock, Copy, FileText, Globe, Eye } from "lucide-react";
+import { ARTICLE_THEMES, MASTER_PROMPT_ARTICLE_AND_VIDEO, buildWordForWordArticleHtml, detectBestArticleTheme, ParsedArticleOutput } from "./lib/articleFormatter";
 
 interface LogEntry {
   id: string;
@@ -132,6 +133,18 @@ export default function StudioMeteoPage() {
   const [manualPromptText, setManualPromptText] = useState("");
   const [uploadingBatch, setUploadingBatch] = useState(false);
 
+  // Actualité ACTUBTP & Publication Multi-Sites
+  const [selectedThemeId, setSelectedThemeId] = useState<string>("auto");
+  const [parsedArticle, setParsedArticle] = useState<ParsedArticleOutput | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string>("");
+  const [coverImageName, setCoverImageName] = useState<string>("");
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [batchUploadedImages, setBatchUploadedImages] = useState<Array<{ url: string; name: string; ref: number }>>([]);
+  const [publishingArticle, setPublishingArticle] = useState(false);
+  const [publishedUrls, setPublishedUrls] = useState<{ meteobtp: string; monsieurmeteo: string; climatmeteo: string; slug: string } | null>(null);
+  const [promptCopied, setPromptCopied] = useState(false);
+  const [showArticlePreview, setShowArticlePreview] = useState(true);
+
   const [phenomenon, setPhenomenon] = useState(PHENOMENONS[0]);
   const [customPhenomenon, setCustomPhenomenon] = useState("");
   const [isCustomPhenomenon, setIsCustomPhenomenon] = useState(false);
@@ -173,13 +186,112 @@ export default function StudioMeteoPage() {
     setNotes("");
     setImportSuccessMessage("");
     setScenes(createEmptyScenes(5));
+    setParsedArticle(null);
+    setCoverImageUrl("");
+    setCoverImageName("");
+    setPublishedUrls(null);
     setResultTiktok(null);
     setResultLandscape(null);
     setLogs([]);
     setSessionId(null);
   };
 
-  // PARSEUR UNIVERSEL 1-CLIC DU RÉSULTAT DE PROMPT IA (Format Texte SCÈNE 1..5 ou JSON)
+  const handleCopyMasterPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(MASTER_PROMPT_ARTICLE_AND_VIDEO);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 3000);
+    } catch {
+      alert("Veuillez copier le texte du prompt manuellement.");
+    }
+  };
+
+  const handleCoverUpload = async (file: File) => {
+    const sId = sessionId || `session_${Date.now()}`;
+    if (!sessionId) setSessionId(sId);
+    setUploadingCover(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+      const remotePath = `blog/${Date.now()}_couverture_${safeName}`;
+      const uploadUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/blog-images/${remotePath}`;
+      await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          apikey: "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
+          Authorization: "Bearer sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
+          "Content-Type": file.type || "application/octet-stream"
+        },
+        body: file
+      });
+      const pubUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/${remotePath}`;
+      setCoverImageUrl(pubUrl);
+      setCoverImageName(file.name);
+    } catch (e) {
+      alert("Erreur lors de l'envoi de la photo de couverture.");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const handlePublishArticle = async () => {
+    if (!parsedArticle || !parsedArticle.title || !parsedArticle.htmlDark) {
+      alert("Aucun article à publier. Collez d'abord le résultat de votre Prompt IA.");
+      return;
+    }
+    setPublishingArticle(true);
+    try {
+      const res = await fetch("/api/publish-article", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: parsedArticle.title,
+          excerpt: parsedArticle.excerpt,
+          category: parsedArticle.category,
+          content_dark: parsedArticle.htmlDark,
+          image_url: coverImageUrl || scenes[0]?.file_url || null
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur de publication.");
+      setPublishedUrls({
+        meteobtp: data.urls.meteobtp,
+        monsieurmeteo: data.urls.monsieurmeteo,
+        climatmeteo: data.urls.climatmeteo,
+        slug: data.slug
+      });
+      setImportSuccessMessage(`🎉 Article publié avec succès sur MétéoBTP, Monsieur Météo et Climat-Météo !`);
+    } catch (e: any) {
+      alert(e.message || "Erreur lors de la publication.");
+    } finally {
+      setPublishingArticle(false);
+    }
+  };
+
+  // Re-formater l'article à la volée quand l'utilisateur change de thème
+  const handleThemeChange = (newThemeId: string) => {
+    setSelectedThemeId(newThemeId);
+    if (parsedArticle && manualPromptText) {
+      const existingImagesByRef: Record<number, { url: string; name: string }> = {};
+      batchUploadedImages.forEach(img => {
+        existingImagesByRef[img.ref] = { url: img.url, name: img.name };
+      });
+      scenes.forEach((sc, idx) => {
+        if (sc.file_url) {
+          const refNum = sc.image_ref || idx + 1;
+          if (!existingImagesByRef[refNum]) {
+            existingImagesByRef[refNum] = { url: sc.file_url, name: sc.file_name || `Image_${refNum}` };
+          }
+        }
+      });
+      const activeTheme = newThemeId === "auto"
+        ? detectBestArticleTheme(manualPromptText)
+        : (ARTICLE_THEMES.find(t => t.id === newThemeId) || ARTICLE_THEMES[0]);
+      const reParsed = buildWordForWordArticleHtml(manualPromptText, activeTheme, existingImagesByRef);
+      if (reParsed) setParsedArticle(reParsed);
+    }
+  };
+
+  // PARSEUR UNIVERSEL 1-CLIC DU RÉSULTAT DE PROMPT IA (Article Web + Format Texte SCÈNE 1..N ou JSON)
   const handleParseManualPrompt = (textOverride?: string) => {
     const raw = (textOverride ?? manualPromptText).trim();
     if (!raw) {
@@ -190,6 +302,9 @@ export default function StudioMeteoPage() {
 
     // Conserver un dictionnaire des images déjà présentes par numéro (Image 1 -> index 0, etc.)
     const existingImagesByRef: Record<number, { url: string; name: string }> = {};
+    batchUploadedImages.forEach(img => {
+      existingImagesByRef[img.ref] = { url: img.url, name: img.name };
+    });
     scenes.forEach((sc, idx) => {
       if (sc.file_url) {
         const refNum = sc.image_ref || idx + 1;
@@ -199,7 +314,17 @@ export default function StudioMeteoPage() {
       }
     });
 
-    // 1. Extraction des blocs "SCÈNE 1", "SCÈNE 2"...
+    // A. Extraction et formatage de l'Article Web MOT POUR MOT
+    const activeTheme = selectedThemeId === "auto"
+      ? detectBestArticleTheme(raw)
+      : (ARTICLE_THEMES.find(t => t.id === selectedThemeId) || ARTICLE_THEMES[0]);
+    const art = buildWordForWordArticleHtml(raw, activeTheme, existingImagesByRef);
+    if (art) {
+      setParsedArticle(art);
+      if (art.title) setTopic(art.title);
+    }
+
+    // B. Extraction des blocs "SCÈNE 1", "SCÈNE 2"...
     const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+(\d+)[^\n]*\n([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+\d+|\n\s*(?:#+\s*|\*\*)*PARTIE\s+\d+|\n\s*```|$))/gi;
     const matches = [...raw.matchAll(sceneRegex)];
 
@@ -279,8 +404,17 @@ export default function StudioMeteoPage() {
       });
 
       setScenes(parsedScenes);
-      if (parsedScenes[0]?.title) setTopic(parsedScenes[0].title);
-      setImportSuccessMessage(`✅ Les ${parsedScenes.length} scènes du prompt ont été remplies automatiquement en 1 clic ! Il ne vous reste plus qu'à glisser vos images (Image 1, 2, 3...).`);
+      if (parsedScenes[0]?.title && !art?.title) setTopic(parsedScenes[0].title);
+      
+      const msg = art
+        ? `✅ Article web complet (mot pour mot en présentation « ${activeTheme.badge} ») + ${parsedScenes.length} scènes vidéo chargés en 1 clic !`
+        : `✅ Les ${parsedScenes.length} scènes vidéo ont été remplies automatiquement en 1 clic !`;
+      setImportSuccessMessage(msg);
+      return;
+    }
+
+    if (art) {
+      setImportSuccessMessage(`✅ L'article web complet a été structuré mot pour mot dans la présentation « ${activeTheme.badge} » !`);
       return;
     }
 
@@ -533,7 +667,27 @@ export default function StudioMeteoPage() {
         };
       });
       setScenes(nextScenes);
-      setImportSuccessMessage(`✅ ${uploaded.length} image(s) téléversée(s) et associées intelligemment aux ${nextScenes.length} scènes !`);
+
+      const batchWithRefs = uploaded.map((u, i) => ({ ...u, ref: i + 1 }));
+      setBatchUploadedImages(batchWithRefs);
+      if (!coverImageUrl && uploaded[0]) {
+        setCoverImageUrl(uploaded[0].url);
+        setCoverImageName(uploaded[0].name);
+      }
+
+      if (manualPromptText) {
+        const existingImagesByRef: Record<number, { url: string; name: string }> = {};
+        batchWithRefs.forEach(img => {
+          existingImagesByRef[img.ref] = { url: img.url, name: img.name };
+        });
+        const activeTheme = selectedThemeId === "auto"
+          ? detectBestArticleTheme(manualPromptText)
+          : (ARTICLE_THEMES.find(t => t.id === selectedThemeId) || ARTICLE_THEMES[0]);
+        const reParsed = buildWordForWordArticleHtml(manualPromptText, activeTheme, existingImagesByRef);
+        if (reParsed) setParsedArticle(reParsed);
+      }
+
+      setImportSuccessMessage(`✅ ${uploaded.length} image(s) téléversée(s) et associées intelligemment à l'article et aux scènes !`);
     } catch (e) {
       console.error(e);
       alert("Erreur lors de l'envoi groupé des images.");
@@ -770,29 +924,39 @@ export default function StudioMeteoPage() {
             </div>
           )}
 
-          {/* 📋 NOUVEAU : COLLER DIRECTEMENT LE RÉSULTAT DU PROMPT IA EN 1 CLIC + UPLOAD GROUPÉ DES IMAGES */}
-          <div className="mt-5 pt-5 border-t border-slate-800/80 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          {/* 📋 PROMPT MAÎTRE 2-EN-1 : ARTICLE ACTUBTP & SCÈNES VIDÉO (MOT POUR MOT) */}
+          <div className="mt-5 pt-5 border-t border-slate-800/80 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40 mr-2">
-                  Mode Prompt Manuel 1 Clic
+                  Option B • Prompt Maître 2-en-1
                 </span>
                 <span className="text-xs md:text-sm font-bold text-white">
-                  Collez ici le résultat de votre Prompt (SCÈNE 1 à 5 ou JSON) : tout se remplit tout seul !
+                  Copiez le Prompt ➔ collez dans ChatGPT avec votre actualité ➔ collez ici la réponse : tout est repris mot pour mot !
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => handleParseManualPrompt(LAST_USER_PROMPT_SAMPLE)}
-                className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold flex items-center gap-1.5 cursor-pointer w-fit shrink-0 transition"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> Charger votre script « Pluie & Vent Mercredi »
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyMasterPrompt}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold flex items-center gap-1.5 cursor-pointer w-fit shrink-0 transition"
+                  title="Copier le Prompt Maître officiel pour ChatGPT"
+                >
+                  <Copy className="w-3.5 h-3.5" /> {promptCopied ? "✓ Prompt Copié !" : "📋 Copier le Prompt Maître (Article + Vidéo)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleParseManualPrompt(LAST_USER_PROMPT_SAMPLE)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold flex items-center gap-1.5 cursor-pointer w-fit shrink-0 transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Exemple « Pluie & Vent Mercredi »
+                </button>
+              </div>
             </div>
 
             <textarea
               rows={4}
-              placeholder={"Collez ici le texte généré par votre Prompt IA :\nSCÈNE 1\n- Image à utiliser : Image 1...\n- Badge : ...\n- Titre : ...\n- Sous-titre : ...\n- Localisation : ...\n- Bandeau Infos Météo : ...\n- Voix off Charon : ..."}
+              placeholder={"Collez ici le résultat de ChatGPT (Article complet et/ou Scènes 1 à 5). Le texte est repris mot pour mot !"}
               value={manualPromptText}
               onChange={e => setManualPromptText(e.target.value)}
               className="w-full bg-slate-950/90 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono leading-relaxed"
@@ -804,12 +968,12 @@ export default function StudioMeteoPage() {
                 onClick={() => handleParseManualPrompt()}
                 className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer"
               >
-                <Sparkles className="w-4 h-4" /> ⚡ Remplir toutes les scènes en 1 clic
+                <Sparkles className="w-4 h-4" /> ⚡ Charger l'Article & les Scènes (Mot pour Mot)
               </button>
 
               <label className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
                 {uploadingBatch ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {uploadingBatch ? "Téléversement..." : "🖼️ Importer mes images (Image 1, 2, 3...) d'un coup"}
+                {uploadingBatch ? "Téléversement..." : "🖼️ Importer mes cartes météo (Image 1, 2, 3...)"}
                 <input
                   type="file"
                   accept="image/*,.gif"
@@ -818,10 +982,175 @@ export default function StudioMeteoPage() {
                   onChange={e => handleBatchFilesUpload(e.target.files)}
                 />
               </label>
-              <span className="text-[11px] text-slate-400">
-                Astuce : sélectionnez vos 3 cartes en même temps, elles se placent automatiquement sur les scènes 1 à 5 (Image 1 → Scènes 1 & 4, Image 2 → Scènes 2 & 5, Image 3 → Scène 3).
-              </span>
+
+              <label className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
+                {uploadingCover ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                {uploadingCover ? "Upload couverture..." : "📸 Photo de couverture 16:9"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => e.target.files?.[0] && handleCoverUpload(e.target.files[0])}
+                />
+              </label>
             </div>
+
+            {/* SÉLECTEUR RAPIDE DE COUVERTURE PARMI LES CARTES DÉJÀ UPLOADÉES */}
+            {batchUploadedImages.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                <span className="text-slate-400 font-semibold">Couverture 16:9 de l'actualité :</span>
+                {batchUploadedImages.map((img) => (
+                  <button
+                    key={img.ref}
+                    type="button"
+                    onClick={() => {
+                      setCoverImageUrl(img.url);
+                      setCoverImageName(img.name);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition ${
+                      coverImageUrl === img.url
+                        ? "bg-sky-500 text-slate-950 border-sky-400 shadow"
+                        : "bg-slate-900 text-slate-300 border-slate-700 hover:border-sky-400"
+                    }`}
+                  >
+                    {coverImageUrl === img.url && <CheckCircle2 className="w-3 h-3" />}
+                    Utiliser Image {img.ref}
+                  </button>
+                ))}
+                {coverImageName && (
+                  <span className="text-[11px] text-emerald-400 ml-1">
+                    ✓ Image active : {coverImageName}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* 📰 CARTE DE PUBLICATION DE L'ACTUALITÉ SUR LES 3 SITES (METEOBTP, MONSIEUR METEO, CLIMAT-METEO) */}
+            {parsedArticle && (
+              <div className="mt-4 p-5 bg-slate-900/90 border-2 border-amber-500/50 rounded-2xl shadow-2xl space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500 text-slate-950">
+                        {parsedArticle.category || "Actualités Météo"}
+                      </span>
+                      <span className="text-xs text-slate-400 font-semibold">
+                        Généré mot pour mot par ChatGPT
+                      </span>
+                    </div>
+                    <h3 className="text-base md:text-lg font-black text-white">
+                      {parsedArticle.title}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5 italic">
+                      {parsedArticle.excerpt}
+                    </p>
+                  </div>
+
+                  {/* SÉLECTEUR DES 5 PRÉSENTATIONS VISUELLES ACTUBTP */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                        🎨 Présentation Visuelle
+                      </label>
+                      <select
+                        value={selectedThemeId}
+                        onChange={e => handleThemeChange(e.target.value)}
+                        className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400"
+                      >
+                        <option value="auto">🎲 Détection automatique (selon le sujet)</option>
+                        {ARTICLE_THEMES.map(th => (
+                          <option key={th.id} value={th.id}>{th.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowArticlePreview(!showArticlePreview)}
+                      className="self-end px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> {showArticlePreview ? "Masquer l'aperçu" : "Voir l'aperçu"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* BOUTON OFFICIEL DE PUBLICATION SUR LES 3 SITES (0-BUILD) */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+                  <div className="text-xs text-slate-300">
+                    <span className="font-bold text-white block mb-0.5">🚀 Prêt à être mis en ligne simultanément sur :</span>
+                    <span className="text-slate-400">meteobtp.fr (Thème Clair Pro) • monsieurmeteo.com (Dark Glass) • climat-meteo.vercel.app</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handlePublishArticle}
+                    disabled={publishingArticle}
+                    className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    {publishingArticle ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                    {publishingArticle ? "Publication en cours..." : "🚀 Publier l'Actualité sur les 3 sites"}
+                  </button>
+                </div>
+
+                {/* LIENS DIRECTS APRÈS PUBLICATION */}
+                {publishedUrls && (
+                  <div className="p-4 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-300 font-bold text-xs md:text-sm">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      Article publié et immédiatement accessible en ligne :
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1 text-xs font-semibold">
+                      <a
+                        href={publishedUrls.meteobtp}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-sky-400 border border-slate-700 rounded-lg flex items-center gap-1 transition"
+                      >
+                        MétéoBTP Pro <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <a
+                        href={publishedUrls.monsieurmeteo}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-sky-400 border border-slate-700 rounded-lg flex items-center gap-1 transition"
+                      >
+                        Monsieur Météo <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <a
+                        href={publishedUrls.climatmeteo}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-sky-400 border border-slate-700 rounded-lg flex items-center gap-1 transition"
+                      >
+                        Climat-Météo <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {/* APERÇU DU CONTENU HTML RENDU EN DIRECT (MOT POUR MOT) */}
+                {showArticlePreview && (
+                  <div className="mt-3 bg-slate-950 p-6 rounded-xl border border-slate-800 max-h-[500px] overflow-y-auto">
+                    <div className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span>Aperçu de l'article (Rendu Dark Glass Monsieur Météo)</span>
+                      <span className="text-amber-400">100% Fidèle aux mots de ChatGPT</span>
+                    </div>
+                    {coverImageUrl && (
+                      <div className="mb-6 rounded-xl overflow-hidden border border-slate-800 shadow-lg max-w-xl mx-auto">
+                        <img src={coverImageUrl} alt="Couverture" className="w-full h-auto object-cover" />
+                        <div className="p-2 bg-slate-900 text-[11px] text-slate-400 text-center italic">
+                          Photo de couverture 16:9 affichée en en-tête des 3 sites
+                        </div>
+                      </div>
+                    )}
+                    <div
+                      dangerouslySetInnerHTML={{ __html: parsedArticle.htmlDark }}
+                      className="prose prose-invert max-w-none text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
