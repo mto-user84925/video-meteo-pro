@@ -349,12 +349,16 @@ replacements = [
 for pat, rep in replacements:
     light_html = re.sub(pat, rep, light_html, flags=re.IGNORECASE)
 
-# Update the 2 most recent posts in meteo_posts and posts
+# Update all recent posts in meteo_posts and posts
 meteo_posts_ids = [
+    "70ef3982-1544-4be1-8142-7beeb3d5a303",
+    "3874b7e6-1ed1-490d-a7ce-4216bf898dc2",
     "e2df1b92-855c-4185-870f-d6fcac2b90f4",
     "5cb21b4a-8160-435d-9a76-66198f1bcc92"
 ]
 posts_ids = [
+    "1edccf23-a3f9-43ec-ab3d-f7b75ed3b193",
+    "ec6a829b-9bf6-4ef1-bb85-db522228b7c3",
     "fbfa11ec-0dde-41ff-82f2-74b9ce331cd4",
     "0bb4d7f4-ee3a-491a-83d0-7f8430ce31ce"
 ]
