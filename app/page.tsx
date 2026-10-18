@@ -503,9 +503,29 @@ export default function StudioMeteoPage() {
         })
       );
 
+      const normalize = (s: string) =>
+        s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
       const nextScenes = scenes.map((sc, i) => {
-        const refIdx = (sc.image_ref ? sc.image_ref - 1 : i) % uploaded.length;
-        const chosen = uploaded[refIdx];
+        let chosen = uploaded[(sc.image_ref ? sc.image_ref - 1 : i) % uploaded.length];
+
+        // 1. Reconnaissance intelligente par mots-clés (ex: "ECMWF AIFS precipitations", "IFS rafales", "GFS geopotentiel 500")
+        if (sc.image_hint) {
+          const hintWords = normalize(sc.image_hint)
+            .split(/\s+/)
+            .filter(w => w.length >= 3 && w !== "image" && w !== "carte" && !/^\d+$/.test(w));
+
+          let bestScore = 0;
+          for (const up of uploaded) {
+            const normFile = normalize(up.name.replace(/\.[^.]+$/, ""));
+            const score = hintWords.filter(hw => normFile.includes(hw)).length;
+            if (score > bestScore) {
+              bestScore = score;
+              chosen = up;
+            }
+          }
+        }
+
         return {
           ...sc,
           file_url: chosen.url,
@@ -513,7 +533,7 @@ export default function StudioMeteoPage() {
         };
       });
       setScenes(nextScenes);
-      setImportSuccessMessage(`✅ ${uploaded.length} image(s) téléversée(s) et réparties automatiquement sur les ${nextScenes.length} scènes !`);
+      setImportSuccessMessage(`✅ ${uploaded.length} image(s) téléversée(s) et associées intelligemment aux ${nextScenes.length} scènes !`);
     } catch (e) {
       console.error(e);
       alert("Erreur lors de l'envoi groupé des images.");
