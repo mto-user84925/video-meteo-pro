@@ -89,6 +89,61 @@ function getBadgeColor(badgeText: string, sceneIndex: number): number[] {
   return [...BADGE_PRESETS[sceneIndex % BADGE_PRESETS.length].color];
 }
 
+function matchImageForScene(
+  ps: { fileName?: string; scene_number: number },
+  idx: number,
+  existingImagesByRef: Record<number, { url: string; name: string }>,
+  currentScene?: Scene
+): { url: string; name: string } {
+  // 1. Essai de correspondance par nom nettoyé (sans extension, sans _copie, sans tiret)
+  if (ps.fileName) {
+    const cleanPs = ps.fileName.toLowerCase().replace(/\.[a-z0-9]+$/i, '').replace(/[-_\s]*copie[-_\s]*/gi, '').replace(/[^a-z0-9]/g, '');
+    if (cleanPs.length >= 6) {
+      for (const img of Object.values(existingImagesByRef)) {
+        const cleanImg = img.name.toLowerCase().replace(/\.[a-z0-9]+$/i, '').replace(/[-_\s]*copie[-_\s]*/gi, '').replace(/[^a-z0-9]/g, '');
+        if (cleanImg.includes(cleanPs) || cleanPs.includes(cleanImg)) {
+          return img;
+        }
+      }
+    }
+  }
+
+  // 2. Essai par mots-clés météo (geopotentiel, rafales, pluie, vent)
+  if (ps.fileName) {
+    const psLower = ps.fileName.toLowerCase();
+    for (const img of Object.values(existingImagesByRef)) {
+      const imgLower = img.name.toLowerCase();
+      if (psLower.includes("geopotentiel") && imgLower.includes("geopotentiel")) return img;
+      if (psLower.includes("pluie") && imgLower.includes("pluie")) return img;
+      if (psLower.includes("rafales") && imgLower.includes("rafales")) {
+        const nums = psLower.match(/\d{5,}/g) || [];
+        if (nums.some(n => imgLower.includes(n))) return img;
+      }
+    }
+  }
+
+  // 3. Essai direct par numéro de scène ou ref (Scène 1 -> Image 1, Scène 2 -> Image 2...)
+  if (existingImagesByRef[ps.scene_number]) {
+    return existingImagesByRef[ps.scene_number];
+  }
+  if (existingImagesByRef[idx + 1]) {
+    return existingImagesByRef[idx + 1];
+  }
+
+  // 4. Fallback par index modulo sur l'ensemble des images disponibles
+  const allImgs = Object.values(existingImagesByRef);
+  if (allImgs.length > 0) {
+    return allImgs[idx % allImgs.length];
+  }
+
+  // 5. Conserver l'image déjà présente sur la scène si existante
+  if (currentScene && currentScene.file_url) {
+    return { url: currentScene.file_url, name: currentScene.file_name || ps.fileName || "" };
+  }
+
+  return { url: "", name: ps.fileName || "" };
+}
+
 const LAST_USER_PROMPT_SAMPLE = `=== DEBUT ARTICLE ===
 TITRE SEO : Météo : retour de la pluie et d'un coup de vent dès ce mercredi sur la moitié nord de la France
 
@@ -723,19 +778,7 @@ export default function StudioMeteoPage() {
       const parsedVideoScenes = parseFullVideoScript(raw);
       if (parsedVideoScenes.length >= 2) {
         const parsedScenes: Scene[] = parsedVideoScenes.map((ps, idx) => {
-          let matchedImg: { url: string; name: string } | undefined = undefined;
-          if (ps.fileName) {
-            for (const img of Object.values(existingImagesByRef)) {
-              if (img.name.toLowerCase().includes(ps.fileName.toLowerCase()) || ps.fileName.toLowerCase().includes(img.name.toLowerCase())) {
-                matchedImg = img;
-                break;
-              }
-            }
-          }
-          if (!matchedImg) {
-            matchedImg = existingImagesByRef[ps.scene_number] || existingImagesByRef[idx + 1] || Object.values(existingImagesByRef)[idx % Math.max(1, Object.keys(existingImagesByRef).length)];
-          }
-
+          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx]);
           return {
             scene_number: ps.scene_number,
             badge: ps.badge,
@@ -745,8 +788,8 @@ export default function StudioMeteoPage() {
             location_tag: ps.location_tag,
             ticker: ps.ticker,
             script_text: ps.script_text,
-            file_url: matchedImg?.url || "",
-            file_name: matchedImg?.name || ps.fileName || "",
+            file_url: matched.url,
+            file_name: matched.name,
             image_ref: ps.scene_number,
             image_hint: ps.fileName
           };
@@ -817,11 +860,18 @@ export default function StudioMeteoPage() {
             location_tag: "TOUTES RÉGIONS",
             ticker: "Restez connectés avec nos prévisions réactualisées.",
             script_text: "Adaptez vos déplacements et activités extérieures, et restez connectés avec METEO CLIMAT PRO.",
-            file_url: existingImagesByRef[1]?.url || "",
-            file_name: existingImagesByRef[1]?.name || "",
-            image_ref: 1
+            file_url: "",
+            file_name: "",
+            image_ref: 5
           }
-        ];
+        ].map((sc, i) => {
+          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i]);
+          return {
+            ...sc,
+            file_url: matched.url,
+            file_name: matched.name
+          };
+        });
         setScenes(autoScenes);
         addArticleLog(`🎬 5 scènes vidéo adaptées automatiquement à partir de l'article pour votre régie vidéo.`, "success");
       }
@@ -914,7 +964,13 @@ export default function StudioMeteoPage() {
   };
 
   // PARSEUR UNIVERSEL 1-CLIC DU RÉSULTAT DE PROMPT IA
-  const handleParseManualPrompt = async (textOverride?: string, options?: { silent?: boolean }): Promise<ParsedArticleOutput | null> => {
+  const handleParseManualPrompt = async (
+    textOverride?: string,
+    options?: {
+      silent?: boolean;
+      imagesOverride?: Array<{ url: string; name: string; ref?: number }>;
+    }
+  ): Promise<ParsedArticleOutput | null> => {
     const raw = (textOverride ?? manualPromptText).trim();
     if (!raw) {
       notify("Veuillez coller ou rédiger l'article dans la boîte avant d'analyser.", "warning");
@@ -942,9 +998,14 @@ export default function StudioMeteoPage() {
       addArticleLog("📥 Début de l'analyse du texte collé (Mode Mot pour Mot)...", "info");
       await new Promise(r => setTimeout(r, 150));
 
+      const imageList = (options?.imagesOverride && options.imagesOverride.length > 0)
+        ? options.imagesOverride
+        : (batchUploadedImages && batchUploadedImages.length > 0 ? batchUploadedImages : []);
+
       const existingImagesByRef: Record<number, { url: string; name: string }> = {};
-      batchUploadedImages.forEach(img => {
-        existingImagesByRef[img.ref] = { url: img.url, name: img.name };
+      imageList.forEach((img, i) => {
+        const r = img.ref || i + 1;
+        existingImagesByRef[r] = { url: img.url, name: img.name };
       });
       scenes.forEach((sc, idx) => {
         if (sc.file_url) {
@@ -985,19 +1046,7 @@ export default function StudioMeteoPage() {
       if (parsedVideoScenes.length >= 2) {
         if (!isSilent) setArticleProgressPercent(75);
         const parsedScenes: Scene[] = parsedVideoScenes.map((ps, idx) => {
-          let matchedImg: { url: string; name: string } | undefined = undefined;
-          if (ps.fileName) {
-            for (const img of Object.values(existingImagesByRef)) {
-              if (img.name.toLowerCase().includes(ps.fileName.toLowerCase()) || ps.fileName.toLowerCase().includes(img.name.toLowerCase())) {
-                matchedImg = img;
-                break;
-              }
-            }
-          }
-          if (!matchedImg) {
-            matchedImg = existingImagesByRef[ps.scene_number] || existingImagesByRef[idx + 1] || Object.values(existingImagesByRef)[idx % Math.max(1, Object.keys(existingImagesByRef).length)];
-          }
-
+          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx]);
           return {
             scene_number: ps.scene_number,
             badge: ps.badge,
@@ -1007,8 +1056,8 @@ export default function StudioMeteoPage() {
             location_tag: ps.location_tag,
             ticker: ps.ticker,
             script_text: ps.script_text,
-            file_url: matchedImg?.url || "",
-            file_name: matchedImg?.name || ps.fileName || "",
+            file_url: matched.url,
+            file_name: matched.name,
             image_ref: ps.scene_number,
             image_hint: ps.fileName
           };
@@ -1100,11 +1149,18 @@ export default function StudioMeteoPage() {
             location_tag: "TOUTES RÉGIONS",
             ticker: "Restez connectés avec nos prévisions réactualisées.",
             script_text: "Adaptez vos déplacements et activités extérieures, et restez connectés avec METEO CLIMAT PRO.",
-            file_url: existingImagesByRef[1]?.url || "",
-            file_name: existingImagesByRef[1]?.name || "",
-            image_ref: 1
+            file_url: "",
+            file_name: "",
+            image_ref: 5
           }
-        ];
+        ].map((sc, i) => {
+          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i]);
+          return {
+            ...sc,
+            file_url: matched.url,
+            file_name: matched.name
+          };
+        });
         setScenes(autoScenes);
         if (!isSilent) {
           setArticleProgressPercent(100);
@@ -1183,7 +1239,7 @@ export default function StudioMeteoPage() {
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [manualPromptText, scenes, parsedArticle]);
+  }, [manualPromptText]);
 
   // IMPORT AUTOMATIQUE EN 1 CLIC DEPUIS N'IMPORTE QUEL LIEN WEB D'ARTICLE (OPTION A)
   const handleImportArticle = async (urlToFetch?: string) => {
@@ -1443,7 +1499,7 @@ export default function StudioMeteoPage() {
       }
 
       if (manualPromptText) {
-        await handleParseManualPrompt(manualPromptText, { silent: true });
+        await handleParseManualPrompt(manualPromptText, { silent: true, imagesOverride: batchWithRefs });
       }
 
       addArticleLog(`✓ ${uploaded.length} carte(s) météo téléversée(s) et reliée(s) aux scènes et à l'article.`, "success");
