@@ -24,7 +24,9 @@ import {
   AlertTriangle,
   X,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Wand2,
+  Sliders
 } from "lucide-react";
 import {
   ARTICLE_THEMES,
@@ -275,6 +277,125 @@ export default function StudioMeteoPage() {
   const [topic, setTopic] = useState("");
   const [notes, setNotes] = useState("");
   const [scenes, setScenes] = useState<Scene[]>(() => createEmptyScenes(5));
+
+  // Auto-détection intelligente du Sujet & Phénomène
+  const [autoDetectedBadge, setAutoDetectedBadge] = useState<string | null>(null);
+  const [detectingDailyTopic, setDetectingDailyTopic] = useState(false);
+
+  const autoDetectAndUpdateMetadata = (text: string) => {
+    if (!text || text.trim().length < 15) return;
+    const clean = text.trim();
+
+    // 1. Titre extraction
+    let detectedTitle = "";
+    const seoMatch = clean.match(/(?:TITRE\s*SEO|TITRE\s*DE\s*L['’]ARTICLE|TITRE|SUJET)\s*:\s*([^\n\r]+)/i);
+    if (seoMatch && seoMatch[1]) {
+      detectedTitle = seoMatch[1].replace(/^\*\*|\*\*$/g, "").replace(/^["«]|["»]$/g, "").trim();
+    } else {
+      const h1Match = clean.match(/(?:^|\n)#+\s+([^\n\r]+)/);
+      if (h1Match && h1Match[1] && !h1Match[1].toUpperCase().includes("DEBUT ARTICLE") && !h1Match[1].toUpperCase().includes("SCÈNE") && !h1Match[1].toUpperCase().includes("SCENE")) {
+        detectedTitle = h1Match[1].replace(/^\*\*|\*\*$/g, "").replace(/^["«]|["»]$/g, "").trim();
+      }
+    }
+
+    if (detectedTitle && detectedTitle.length >= 5) {
+      setTopic(detectedTitle);
+    }
+
+    // 2. Phénomène météo détection
+    const lower = clean.toLowerCase();
+    let matchedPhenomenon = "";
+
+    if (/cévenol|cevenol|cévennes|cevennes|méditerranéen|mediterraneen|gard|hérault|herault|ardèche|ardeche|vaucluse/.test(lower)) {
+      matchedPhenomenon = "Épisode méditerranéen / Cévenol";
+    } else if (/coup de vent|tempête|tempete|rafales?|bourrasque|vent violent|vent fort|depression atlantique|dépression atlantique|vents d['’]ouest/.test(lower)) {
+      matchedPhenomenon = "Tempête / Coup de vent violent";
+    } else if (/canicule|dôme de chaleur|dome de chaleur|vague de chaleur|chaleur extrême|forte chaleur|torride|record de chaleur/.test(lower)) {
+      matchedPhenomenon = "Canicule / Vague de chaleur";
+    } else if (/orages? violents?|grêle|grele|supercellule|impacts? de foudre|foudre|tonnerre/.test(lower)) {
+      matchedPhenomenon = "Orages violents / Grêle";
+    } else if (/neige|verglas|grand froid|polaire|gelée|blizzard/.test(lower)) {
+      matchedPhenomenon = "Neige / Verglas / Grand froid";
+    } else if (/inondations?|crues?|ruissellement|lame d['’]eau|pluies diluviennes|trombes d['’]eau/.test(lower)) {
+      matchedPhenomenon = "Inondations / Crues majeures";
+    } else if (/sécheresse|secheresse|feux de forêt|incendies?|déficit en eau|déficit pluviométrique/.test(lower)) {
+      matchedPhenomenon = "Sécheresse / Risque feux de forêt";
+    } else if (/cyclone|ouragan|typhon|dépression tropicale/.test(lower)) {
+      matchedPhenomenon = "Cyclone / Tempête tropicale";
+    } else if (/poussières du sahara|poussiere du sahara|sable du sahara|particules fines/.test(lower)) {
+      matchedPhenomenon = "Poussières du Sahara / Qualité de l'air";
+    } else if (/point météo|point meteo|tendance 7 jours|tendance hebdomadaire|modélisations?/.test(lower)) {
+      matchedPhenomenon = "Point Météo Hebdomadaire 7 jours";
+    } else if (/pluies?|perturbations?|front pluvieux/.test(lower)) {
+      if (/vent/.test(lower)) {
+        matchedPhenomenon = "Tempête / Coup de vent violent";
+      } else {
+        matchedPhenomenon = "Inondations / Crues majeures";
+      }
+    }
+
+    if (matchedPhenomenon) {
+      setPhenomenon(matchedPhenomenon);
+      setIsCustomPhenomenon(false);
+    }
+
+    // 3. Durée cible détection
+    const sceneMatches = clean.match(/(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+\d+/gi);
+    if (sceneMatches && sceneMatches.length >= 2) {
+      const voiceLines = clean.match(/(?:voix off|script|texte|charon)\s*:\s*([^\n]+)/gi);
+      let wordCount = 0;
+      if (voiceLines) {
+        wordCount = voiceLines.join(" ").split(/\s+/).length;
+      } else {
+        wordCount = Math.round(clean.split(/\s+/).length * 0.25);
+      }
+      if (wordCount < 140) {
+        setTargetDuration(45);
+      } else if (wordCount <= 210) {
+        setTargetDuration(60);
+      } else if (wordCount <= 300) {
+        setTargetDuration(90);
+      } else {
+        setTargetDuration(120);
+      }
+    }
+
+    if (detectedTitle || matchedPhenomenon) {
+      const info = `Auto-détecté : ${matchedPhenomenon || "Titre extrait"}`;
+      setAutoDetectedBadge(info);
+      notify(`🪄 Auto-détection : ${matchedPhenomenon || "Titre extrait"} !`, "info");
+      setTimeout(() => setAutoDetectedBadge(null), 7000);
+    }
+  };
+
+  const handleFetchDailyTopic = async () => {
+    setDetectingDailyTopic(true);
+    notify("Détection de l'actualité météo du jour...", "info");
+    try {
+      const res = await fetch("/api/daily-weather-topic");
+      if (!res.ok) throw new Error("Erreur lors de la détection de l'actualité");
+      const data = await res.json();
+      if (data.phenomenon) {
+        setPhenomenon(data.phenomenon);
+        setIsCustomPhenomenon(false);
+      }
+      if (data.topic) {
+        setTopic(data.topic);
+      }
+      if (data.target_duration) {
+        setTargetDuration(data.target_duration);
+      }
+      const badgeText = `Actualité du jour : ${data.phenomenon}`;
+      setAutoDetectedBadge(badgeText);
+      notify(`⚡ Actualité du jour : "${data.topic}" !`, "success");
+      addArticleLog(`⚡ Actualité du jour détectée : [${data.phenomenon}] "${data.topic}"`, "success");
+      setTimeout(() => setAutoDetectedBadge(null), 8000);
+    } catch (err: any) {
+      notify(err.message || "Erreur lors de la détection", "warning");
+    } finally {
+      setDetectingDailyTopic(false);
+    }
+  };
 
   // Régie Vidéo & Rendu
   const [generatingScript, setGeneratingScript] = useState(false);
@@ -1587,6 +1708,34 @@ export default function StudioMeteoPage() {
 
         {/* 🎛️ BARRE DE PILOTAGE & CALIBRAGE GLOBAL (DURÉE, PHÉNOMÈNE, TITRE) */}
         <section className="bg-slate-900/90 border-2 border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-md space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-sky-400" /> Paramètres Éditoriaux & Vidéo
+              </span>
+              {autoDetectedBadge ? (
+                <span className="text-[11px] font-bold text-emerald-300 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-400/50 animate-pulse flex items-center gap-1">
+                  <Wand2 className="w-3 h-3 text-emerald-400" /> {autoDetectedBadge}
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-500 font-medium hidden md:inline">
+                  (Remplissage 100% automatique au copier-coller ou via le bouton ci-contre)
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleFetchDailyTopic}
+              disabled={detectingDailyTopic}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-sky-500/20 hover:from-amber-500/30 hover:to-sky-500/30 text-amber-300 border border-amber-500/40 text-xs font-extrabold flex items-center gap-2 transition cursor-pointer shadow-md disabled:opacity-50 shrink-0"
+              title="Détecter l'événement météo marquant du jour en France et pré-remplir instantanément la durée, le phénomène et le titre"
+            >
+              {detectingDailyTopic ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
+              {detectingDailyTopic ? "Détection en cours..." : "⚡ Actualité météo du jour en 1 clic"}
+            </button>
+          </div>
+
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             
             {/* 1. SÉLECTEUR DE DURÉE CIBLE (MIS EN AVANT AU SOMMET) */}
@@ -1612,9 +1761,16 @@ export default function StudioMeteoPage() {
 
             {/* 2. PHÉNOMÈNE MÉTÉO */}
             <div className="flex-1">
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" /> 2. Phénomène Météo
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" /> 2. Phénomène Météo
+                </label>
+                {autoDetectedBadge && (
+                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/40">
+                    ✓ Auto-détecté
+                  </span>
+                )}
+              </div>
               <div className="flex gap-2">
                 <select
                   value={isCustomPhenomenon ? "OTHER_CUSTOM" : phenomenon}
@@ -1627,7 +1783,7 @@ export default function StudioMeteoPage() {
                       setPhenomenon(val);
                     }
                   }}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold focus:outline-none focus:border-sky-500 transition cursor-pointer"
+                  className={`flex-1 bg-slate-950 border ${autoDetectedBadge ? 'border-emerald-500/70 ring-1 ring-emerald-500/40' : 'border-slate-700'} rounded-xl px-3 py-2 text-xs text-white font-semibold focus:outline-none focus:border-sky-500 transition cursor-pointer`}
                 >
                   {PHENOMENONS.map(p => <option key={p} value={p}>{p}</option>)}
                   <option value="OTHER_CUSTOM">➕ Autre phénomène (saisie libre...)</option>
@@ -1647,15 +1803,22 @@ export default function StudioMeteoPage() {
 
             {/* 3. TITRE / SUJET DE L'ALERTE */}
             <div className="flex-1">
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                3. Titre / Sujet de l'actualité
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  3. Titre / Sujet de l'actualité
+                </label>
+                {topic && autoDetectedBadge && (
+                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/40">
+                    ✓ Titre extrait
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 placeholder="Ex: Nette dégradation pluvieuse et venteuse dès mercredi..."
                 value={topic}
                 onChange={e => setTopic(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-semibold transition placeholder-slate-600"
+                className={`w-full bg-slate-950 border ${autoDetectedBadge ? 'border-emerald-500/70 ring-1 ring-emerald-500/40' : 'border-slate-700'} rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-semibold transition placeholder-slate-600`}
               />
             </div>
 
@@ -1798,7 +1961,10 @@ export default function StudioMeteoPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleParseManualPrompt(LAST_USER_PROMPT_SAMPLE)}
+                  onClick={() => {
+                    autoDetectAndUpdateMetadata(LAST_USER_PROMPT_SAMPLE);
+                    handleParseManualPrompt(LAST_USER_PROMPT_SAMPLE);
+                  }}
                   className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold flex items-center gap-1.5 cursor-pointer shrink-0 transition"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> Exemple « Pluie & Vent »
@@ -1808,9 +1974,18 @@ export default function StudioMeteoPage() {
 
             <textarea
               rows={4}
-              placeholder="Collez ici le résultat de ChatGPT ou vos notes brutes, ou cliquez directement sur '🤖 Rédiger avec DeepSeek V4.1 Flash'..."
+              placeholder="Collez ici le résultat de ChatGPT ou vos notes brutes (le Titre, le Phénomène et la Durée seront automatiquement détectés et remplis au sommet !)..."
               value={manualPromptText}
-              onChange={e => setManualPromptText(e.target.value)}
+              onChange={e => {
+                setManualPromptText(e.target.value);
+                autoDetectAndUpdateMetadata(e.target.value);
+              }}
+              onPaste={e => {
+                const pasted = e.clipboardData.getData("text");
+                if (pasted) {
+                  autoDetectAndUpdateMetadata(pasted);
+                }
+              }}
               className="w-full bg-slate-950/90 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono leading-relaxed"
             />
 
