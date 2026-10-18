@@ -504,21 +504,96 @@ export function buildWordForWordArticleHtml(
       continue;
     }
 
-    // 1. Balise d'insertion d'image explicite : [IMAGE 1 : Légende] ou **Image 1 :** ...
-    const imgTagMatch =
-      line.match(/^\[?\s*(?:IMAGE|CARTE|FIGURE)\s*(\d+)\s*(?:[:—-]\s*([^\]]*))?\]?$/i) ||
-      line.match(/^\*\*(?:Image|Carte|Figure)\s*(\d+)\s*[:—-]\*\*\s*(.+)$/i);
+    // 1. Détection universelle des balises d'insertion d'image
+    // Ex: IMAGE 1 À INSÉRER — nom.png — légende...
+    // Ex: [IMAGE 1 — Fichier : nom.png. Légende : ...]
+    // Ex: [IMAGE 1 : Légende] ou **Image 1 :** ...
+    // Ex: IMAGE 1 (sur sa propre ligne)
+    let isImageTag = false;
+    let imgNum: number | null = null;
+    let rawCaption = "";
 
-    if (imgTagMatch) {
-      const imgNum = Number(imgTagMatch[1]) || 1;
-      const caption = (imgTagMatch[2] || `Carte météorologique — Figure ${imgNum}`).replace(/\]$/, "").trim();
-      const imgObj = imagesByRef[imgNum];
+    const explicitTagMatch =
+      line.match(/^\[?\s*(?:IMAGE|CARTE|FIGURE)\s*(\d+)(?:\s*(?:À|A)\s*INS[ÉE]RER)?\s*(?:[:—-]\s*(.*))?\]?$/i) ||
+      line.match(/^\*\*(?:Image|Carte|Figure)\s*(\d+)(?:\s*(?:À|A)\s*INS[ÉE]RER)?\s*[:—-]?\*\*\s*(.*)$/i) ||
+      line.match(/^(?:\[?\s*(?:IMAGE|CARTE|FIGURE)\s*(\d+)(?:\s*(?:À|A)\s*INS[ÉE]RER)?[^\]\n]*\]?)\s*[:—-]?\s*(.*)$/i);
+
+    if (explicitTagMatch) {
+      isImageTag = true;
+      imgNum = Number(explicitTagMatch[1]) || 1;
+      rawCaption = explicitTagMatch[2] ? explicitTagMatch[2].replace(/\]$/, "").trim() : "";
+    } else {
+      const inlineTagMatch = line.match(/(?:\[|\b)(?:IMAGE|CARTE|FIGURE)\s*(\d+)(?:\s*(?:À|A)\s*INS[ÉE]RER)?\s*[:—-]\s*(.*)/i);
+      if (inlineTagMatch) {
+        isImageTag = true;
+        imgNum = Number(inlineTagMatch[1]) || 1;
+        rawCaption = inlineTagMatch[2].replace(/\]$/, "").trim();
+      } else {
+        // Vérifier si la ligne cite directement un des noms de fichiers uploadés
+        for (const [refStr, imgInfo] of Object.entries(imagesByRef)) {
+          const refN = Number(refStr);
+          const cleanName = imgInfo.name.replace(/\.[^.]+$/, "");
+          if (cleanName.length > 8 && line.includes(cleanName) && (line.toLowerCase().includes("image") || line.toLowerCase().includes("carte") || line.toLowerCase().includes("figure") || line.toLowerCase().includes("fichier") || line.includes("—") || line.includes(":"))) {
+            isImageTag = true;
+            imgNum = refN;
+            rawCaption = line;
+            break;
+          }
+        }
+      }
+    }
+
+    if (isImageTag && imgNum !== null) {
+      // Découper si un titre ou sous-section a été collé à la fin de la légende
+      const splitHeaderRegex = /(?<=[.!?])\s*(?=(?:Comprendre\b|Les conséquences\b|À ne pas interpréter\b|TROIS SITUATIONS\b|NIVEAU\s+\d+|Les\s+\d+\s+facteurs\b|Fiabilité\b|FAQ\b|Conclusion\b|En résumé\b|[A-ZÀ-Ÿ\s]{5,}:?))/;
+      const parts = rawCaption.split(splitHeaderRegex);
+      let caption = parts[0].trim();
+      if (parts.length > 1) {
+        const trailingHeader = parts.slice(1).join(" ").trim();
+        if (trailingHeader) {
+          bodyLines.splice(i + 1, 0, `**${trailingHeader}**`);
+        }
+      }
+
+      // Nettoyer le préfixe du nom de fichier dans la légende
+      caption = caption
+        .replace(/^(?:IMAGE\s*\d+\s*(?:À|A)\s*INS[ÉE]RER\s*[:—-]\s*)?/i, "")
+        .replace(/^(?:Fichier\s*:\s*)?[a-zA-Z0-9_.-]+\.(?:png|jpg|jpeg|gif|webp)\s*[:—-]\s*/i, "")
+        .replace(/^(?:Légende\s*:\s*)/i, "")
+        .replace(/\]$/, "")
+        .trim();
+
+      // Résolution intelligente de l'image
+      let matchedObj: { url: string; name: string } | undefined = undefined;
+      for (const info of Object.values(imagesByRef)) {
+        const cleanName = info.name.replace(/\.[^.]+$/, "");
+        if (cleanName.length > 8 && (line.includes(cleanName) || rawCaption.includes(cleanName))) {
+          matchedObj = info;
+          break;
+        }
+      }
+
+      if (!matchedObj || !matchedObj.url) {
+        matchedObj = imagesByRef[imgNum];
+      }
+
+      if (!matchedObj || !matchedObj.url) {
+        const allImgs = Object.values(imagesByRef).filter(img => img.url);
+        if (allImgs.length > 0) {
+          matchedObj = allImgs[(imgNum - 1) % allImgs.length];
+        }
+      }
+
       usedImageRefs.add(imgNum);
 
-      if (imgObj?.url) {
+      if (!caption) {
+        caption = matchedObj ? `Modélisation météorologique Météo-Climat Pro (${matchedObj.name.replace(/\.[^.]+$/, "")})` : `Carte météorologique — Figure ${imgNum}`;
+      }
+
+      if (matchedObj?.url) {
         htmlParts.push(`
   <div style="margin: 28px 0; text-align: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px;">
-    <img src="${imgObj.url}" alt="${caption.replace(/"/g, "&quot;")}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
+    <img src="${matchedObj.url}" alt="${caption.replace(/"/g, "&quot;")}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
     <p style="font-size: 13px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
       <strong style="color: #f1f5f9;">Figure ${imgNum} :</strong> ${formatInlineMarkdown(caption)}
     </p>
@@ -526,7 +601,7 @@ export function buildWordForWordArticleHtml(
       } else {
         htmlParts.push(`
   <div style="margin: 20px 0; padding: 14px; border: 1px dashed ${theme.primaryDark}; border-radius: 8px; text-align: center; color: #94a3b8; font-size: 13px;">
-    📌 Emplacement <strong>Image ${imgNum}</strong> (${formatInlineMarkdown(caption)}) — <em>Importez vos images avec le bouton vert pour l'afficher automatiquement ici.</em>
+    📌 Emplacement <strong>Figure ${imgNum}</strong> (${formatInlineMarkdown(caption)}) — <em>Image associée.</em>
   </div>`);
       }
       i++;
@@ -709,22 +784,25 @@ export function buildWordForWordArticleHtml(
     i++;
   }
 
-  // Si l'utilisateur a importé des cartes (Image 1, 2, 3) mais que le texte de ChatGPT n'avait pas mis de balise [IMAGE 1],
-  // on insère proprement les cartes non encore affichées à la fin de l'analyse pour qu'aucune carte ne soit oubliée
-  const remainingRefs = Object.keys(imagesByRef)
-    .map(Number)
-    .filter(n => !usedImageRefs.has(n) && imagesByRef[n]?.url);
+  // Uniquement si AUCUNE image n'a été insérée dans le corps du texte (ex: article brut sans aucune mention d'image),
+  // on insère alors les cartes disponibles à la fin pour qu'elles restent visibles (maximum 3 cartes)
+  if (usedImageRefs.size === 0) {
+    const remainingRefs = Object.keys(imagesByRef)
+      .map(Number)
+      .filter(n => imagesByRef[n]?.url)
+      .slice(0, 3);
 
-  if (remainingRefs.length > 0) {
-    for (const refNum of remainingRefs) {
-      const imgObj = imagesByRef[refNum];
-      htmlParts.push(`
+    if (remainingRefs.length > 0) {
+      for (const refNum of remainingRefs) {
+        const imgObj = imagesByRef[refNum];
+        htmlParts.push(`
   <div style="margin: 28px 0; text-align: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px;">
     <img src="${imgObj.url}" alt="Carte météorologique ${refNum}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
     <p style="font-size: 13px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
       <strong style="color: #f1f5f9;">Figure ${refNum} :</strong> Modélisation numérique Météo-Climat Pro (${imgObj.name.replace(/\.[^.]+$/, "")})
     </p>
   </div>`);
+      }
     }
   }
 
