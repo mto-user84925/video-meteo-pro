@@ -194,11 +194,14 @@ def render(job_file):
         job = json.load(f)
 
     session_id = job.get("session_id", str(int(time.time())))
+    target_dur_input = float(job.get("target_duration", 60.0))
     scenes_data = job["scenes"]
     work_dir = os.path.join(BASE_DIR, "scratch", f"job_{session_id}")
     os.makedirs(work_dir, exist_ok=True)
 
-    print(f"\n🚀 Démarrage du job {session_id} avec {len(scenes_data)} scènes...")
+    total_words = sum(len(s.get("script_text", "").split()) for s in scenes_data)
+    expected_words = round(target_dur_input * 2.85)
+    print(f"\n🚀 Démarrage du job {session_id} avec {len(scenes_data)} scènes ({total_words} mots, durée cible : {target_dur_input:.0f}s, attendu ~{expected_words} mots)...")
 
     # 1. Téléchargement des visuels et génération audio pour chaque scène
     scenes = []
@@ -360,14 +363,24 @@ def render(job_file):
     total_speech_dur = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", master_norm_wav]).decode().strip())
     print(f"🎙️ Piste voix off complète : {total_speech_dur:.2f}s")
 
+    # Calage broadcast professionnel avec outro musicale et respect de target_duration
+    if total_speech_dur >= (target_dur_input - 5.0):
+        TARGET_DUR = round(max(total_speech_dur + 1.8, target_dur_input), 2)
+    elif total_speech_dur >= (target_dur_input * 0.7):
+        TARGET_DUR = round(total_speech_dur + 2.5, 2)
+    else:
+        TARGET_DUR = round(total_speech_dur + 2.0, 2)
+    outro_dur = round(max(1.0, TARGET_DUR - total_speech_dur), 2)
+    print(f"⏱️ Durée vidéo finale calibrée : {TARGET_DUR:.2f}s (Voix : {total_speech_dur:.2f}s | Outro musicale : {outro_dur:.2f}s)")
+
     # 2. Encodage TikTok (9:16)
     progress(session_id, 76, "📱 Encodage vidéo TikTok 9:16...", "video")
     rendered_tk = []
     for idx, sc in enumerate(scenes):
         clip_path = os.path.join(work_dir, f"tk_{sc['id']}.mp4")
         is_last = (idx == len(scenes) - 1)
-        tpad_str = ",tpad=stop_mode=clone:stop_duration=1.5" if is_last else ""
-        clip_dur = sc["duration"] + 1.0 if is_last else sc["duration"]
+        tpad_str = f",tpad=stop_mode=clone:stop_duration={outro_dur + 1.5:.2f}" if is_last else ""
+        clip_dur = sc["duration"] + outro_dur + 0.5 if is_last else sc["duration"]
 
         cmd = ["ffmpeg", "-y"]
         if sc["is_gif"]:
@@ -416,8 +429,8 @@ def render(job_file):
     for idx, sc in enumerate(scenes):
         clip_path = os.path.join(work_dir, f"ls_{sc['id']}.mp4")
         is_last = (idx == len(scenes) - 1)
-        tpad_str = ",tpad=stop_mode=clone:stop_duration=1.5" if is_last else ""
-        clip_dur = sc["duration"] + 1.0 if is_last else sc["duration"]
+        tpad_str = f",tpad=stop_mode=clone:stop_duration={outro_dur + 1.5:.2f}" if is_last else ""
+        clip_dur = sc["duration"] + outro_dur + 0.5 if is_last else sc["duration"]
 
         cmd = ["ffmpeg", "-y"]
         if sc["is_gif"]:
@@ -456,7 +469,6 @@ def render(job_file):
 
     # 4. Muxing avec calage temporel anti-écran noir
     progress(session_id, 93, "🛡️ Mixage voix + musique et contrôle qualité...", "audio")
-    TARGET_DUR = round(total_speech_dur - 0.13, 2)
     output_tk = os.path.join(work_dir, "bulletin_tiktok.mp4")
     output_ls = os.path.join(work_dir, "bulletin_paysage.mp4")
 

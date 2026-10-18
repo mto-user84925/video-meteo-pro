@@ -6,12 +6,17 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, phenomenon, topic } = await req.json();
+    const { text, phenomenon, topic, notes, target_duration = 60, scene_count = 5 } = await req.json();
 
     const apiKey = process.env.OPENROUTER_API_KEY || "";
     if (!apiKey) {
       return NextResponse.json({ error: "Clé OPENROUTER_API_KEY manquante sur le serveur." }, { status: 500 });
     }
+
+    const durationSec = Number(target_duration) || 60;
+    const numScenes = Math.max(2, Math.min(10, Number(scene_count) || 5));
+    const totalWordsTarget = Math.round(durationSec * 2.9);
+    const wordsPerLaterScene = Math.round((totalWordsTarget - 14) / (numScenes - 1));
 
     const promptUser = `${MASTER_PROMPT_ARTICLE_AND_VIDEO}
 
@@ -20,10 +25,13 @@ DONNÉES TRANSMISES PAR L'UTILISATEUR :
 ==================================================
 PHÉNOMÈNE : ${phenomenon || "Épisode météorologique"}
 TITRE / SUJET : ${topic || "Actualité météo"}
+${notes ? `NOTES ET CHIFFRES : ${notes}\n` : ""}DURÉE VIDÉO CIBLÉE : ${durationSec} secondes (soit un total d'environ ${totalWordsTarget} mots pour les ${numScenes} scènes).
+- Scène 1 (Accroche) : STRICTEMENT <= 14 mots (durée <= 4 secondes).
+- Scènes 2 à ${numScenes} : environ ${wordsPerLaterScene} mots par scène.
 TEXTE / INFORMATIONS BRUTES DE L'ACTUALITÉ :
-${text || topic || phenomenon || "Épisode pluvieux et venteux avec nette dégradation par l'ouest."}
+${text || notes || topic || phenomenon || "Épisode pluvieux et venteux avec nette dégradation par l'ouest."}
 
-RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN ARTICLE ===) ET LES SCÈNES 1 À 5.
+RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN ARTICLE ===) ET LES ${numScenes} SCÈNES VIDÉO (CALIBRÉES POUR ${durationSec}s).
 `;
 
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -47,7 +55,7 @@ RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN
           }
         ],
         temperature: 0.3,
-        max_tokens: 4500
+        max_tokens: 8000
       })
     });
 
@@ -57,9 +65,15 @@ RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN
     }
 
     const data = await res.json();
-    const rawContent = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning || "";
+    const choice = data.choices?.[0];
+    const rawContent = choice?.message?.content || "";
 
     if (!rawContent) {
+      if (choice?.finish_reason === "length" || choice?.message?.reasoning) {
+        return NextResponse.json({
+          error: "Le modèle a épuisé son quota de tokens pendant la phase de réflexion avant de rédiger l'article. Veuillez relancer la génération."
+        }, { status: 500 });
+      }
       return NextResponse.json({ error: "Aucun texte généré par le modèle." }, { status: 500 });
     }
 

@@ -14,6 +14,7 @@ function sanitizeHtml(html: string): string {
 function adaptToLightTheme(html: string): string {
   if (!html) return "";
   const replacements: Array<[RegExp, string]> = [
+    // Text colors (Dark Glass -> High Contrast Light Theme)
     [/color:\s*#f1f5f9/gi, "color: #1e293b"],
     [/color:\s*#f8fafc/gi, "color: #0f172a"],
     [/color:\s*#ffffff/gi, "color: #0f172a"],
@@ -29,14 +30,21 @@ function adaptToLightTheme(html: string): string {
     [/color:\s*#dbeafe/gi, "color: #1e3a8a"],
     [/color:\s*#cbd5e1/gi, "color: #334155"],
     [/color:\s*#94a3b8/gi, "color: #64748b"],
-    [/background:\s*rgba\(15,\s*23,\s*42,\s*0\.[468]+\)/gi, "background: #f8fafc; color: #1e293b"],
-    [/background:\s*rgba\(30,\s*41,\s*59,\s*0\.[468]+\)/gi, "background: #f1f5f9; color: #1e293b"],
-    [/background:\s*rgba\(22,\s*101,\s*52,\s*0\.[123]+\)/gi, "background: #f0fdf4; border: 1px solid #bbf7d0"],
-    [/background:\s*rgba\(245,\s*158,\s*11,\s*0\.[123]+\)/gi, "background: #fffbeb; border: 1px solid #fde68a"],
-    [/background:\s*rgba\(220,\s*38,\s*38,\s*0\.[123]+\)/gi, "background: #fef2f2; border: 1px solid #fecaca"],
-    [/background:\s*rgba\(56,\s*189,\s*248,\s*0\.15\)/gi, "background: #002147; color: #ffffff"],
-    [/background:\s*rgba\(56,\s*189,\s*248,\s*0\.1\)/gi, "background: #eff6ff; border: 1px solid #bfdbfe"],
-    [/rgba\(56,\s*189,\s*248,\s*0\.[2345]+\)/gi, "#cbd5e1"],
+
+    // Backgrounds - Dark containers to clean slate / light boxes (Themes 1 to 5)
+    [/background:\s*rgba\(15,\s*23,\s*42,\s*0\.[0-9]+\)/gi, "background: #f8fafc; color: #1e293b"],
+    [/background:\s*rgba\(30,\s*41,\s*59,\s*0\.[0-9]+\)/gi, "background: #f1f5f9; color: #1e293b"],
+    [/background:\s*rgba\(30,\s*58,\s*138,\s*0\.[0-9]+\)/gi, "background: #eff6ff; border: 1px solid #bfdbfe"],
+    [/background:\s*rgba\(59,\s*130,\s*246,\s*0\.[0-9]+\)/gi, "background: #eff6ff; color: #1e40af"],
+    [/background:\s*rgba\(14,\s*165,\s*233,\s*0\.[0-9]+\)/gi, "background: #f0f9ff; color: #0369a1"],
+    [/background:\s*rgba\(22,\s*101,\s*52,\s*0\.[0-9]+\)/gi, "background: #f0fdf4; border: 1px solid #bbf7d0"],
+    [/background:\s*rgba\(245,\s*158,\s*11,\s*0\.[0-9]+\)/gi, "background: #fffbeb; border: 1px solid #fde68a"],
+    [/background:\s*rgba\(220,\s*38,\s*38,\s*0\.[0-9]+\)/gi, "background: #fef2f2; border: 1px solid #fecaca"],
+    [/background:\s*rgba\(56,\s*189,\s*248,\s*0\.[0-9]+\)/gi, "background: #f0f9ff; border: 1px solid #bae6fd"],
+
+    // Borders & dividers
+    [/rgba\(56,\s*189,\s*248,\s*0\.[0-9]+\)/gi, "#cbd5e1"],
+    [/rgba\(255,\s*255,\s*255,\s*0\.[0-9]+\)/gi, "#e2e8f0"],
   ];
   let out = html;
   for (const [pat, rep] of replacements) {
@@ -51,8 +59,8 @@ function slugify(text: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 75);
+    .slice(0, 75)
+    .replace(/^-+|-+$/g, "");
   const ts = Math.floor(Date.now() / 1000);
   return `${base || "actualite-meteo"}-${ts}`;
 }
@@ -74,7 +82,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Titre et contenu requis." }, { status: 400 });
     }
 
-    const slug = body.slug || slugify(title);
+    const rawSlug = body.slug ? String(body.slug).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") : "";
+    const slug = rawSlug || slugify(title);
+    const cleanExcerpt = (excerpt || title || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 300);
     const darkHtml = sanitizeHtml(content_dark);
     const lightHtml = sanitizeHtml(content_light || adaptToLightTheme(darkHtml));
     const nowIso = new Date().toISOString();
@@ -90,7 +100,7 @@ export async function POST(req: NextRequest) {
     const meteoPostPayload = {
       title,
       slug,
-      excerpt: excerpt || title,
+      excerpt: cleanExcerpt,
       content: darkHtml,
       image_url: image_url || null,
       published: true,
@@ -112,9 +122,10 @@ export async function POST(req: NextRequest) {
 
     const insertedMeteo = await resMeteo.json();
 
-    // 2. Tentative d'insertion de la version claire dans posts
+    // 2. Synchronisation de la version claire dans posts (MétéoBTP Pro & Climat-Météo)
+    let postsInserted = false;
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/posts`, {
+      const resPosts = await fetch(`${SUPABASE_URL}/rest/v1/posts`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -122,12 +133,22 @@ export async function POST(req: NextRequest) {
           content: lightHtml
         })
       });
-    } catch {}
+      postsInserted = resPosts.ok;
+      if (!resPosts.ok) {
+        console.warn("[publish-article] Note insertion posts:", await resPosts.text());
+      }
+    } catch (e: any) {
+      console.warn("[publish-article] Exception insertion posts:", e?.message);
+    }
 
     return NextResponse.json({
       success: true,
       slug,
       id: insertedMeteo?.[0]?.id,
+      synced_tables: {
+        meteo_posts: true,
+        posts: postsInserted
+      },
       urls: {
         meteobtp: `https://meteobtp.fr/actualites/${slug}`,
         monsieurmeteo: `https://monsieurmeteo.com/actualites/${slug}`,
