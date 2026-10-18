@@ -144,6 +144,7 @@ export default function StudioMeteoPage() {
   const [publishedUrls, setPublishedUrls] = useState<{ meteobtp: string; monsieurmeteo: string; climatmeteo: string; slug: string } | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
   const [showArticlePreview, setShowArticlePreview] = useState(true);
+  const [generatingWithDeepseek, setGeneratingWithDeepseek] = useState(false);
 
   const [phenomenon, setPhenomenon] = useState(PHENOMENONS[0]);
   const [customPhenomenon, setCustomPhenomenon] = useState("");
@@ -203,6 +204,35 @@ export default function StudioMeteoPage() {
       setTimeout(() => setPromptCopied(false), 3000);
     } catch {
       alert("Veuillez copier le texte du prompt manuellement.");
+    }
+  };
+
+  const handleGenerateWithDeepseek = async () => {
+    const rawToUse = manualPromptText.trim() || topic.trim() || phenomenon;
+    if (!rawToUse) {
+      alert("Veuillez saisir des notes, un sujet ou du texte brut dans la boîte avant de lancer DeepSeek.");
+      return;
+    }
+    setGeneratingWithDeepseek(true);
+    setImportSuccessMessage("🤖 Rédaction de l'article (27 sections) et des 5 scènes en cours avec DeepSeek V4.1 Flash (patientez ~15-20s)...");
+    try {
+      const res = await fetch("/api/generate-article", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: rawToUse,
+          phenomenon: effectivePhenomenon,
+          topic
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur de génération.");
+      setManualPromptText(data.content);
+      handleParseManualPrompt(data.content);
+    } catch (e: any) {
+      alert(e.message || "Erreur lors de l'appel à DeepSeek.");
+    } finally {
+      setGeneratingWithDeepseek(false);
     }
   };
 
@@ -969,6 +999,17 @@ export default function StudioMeteoPage() {
                 className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" /> ⚡ Charger l'Article & les Scènes (Mot pour Mot)
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGenerateWithDeepseek}
+                disabled={generatingWithDeepseek}
+                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-black rounded-xl shadow-lg shadow-indigo-600/25 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer disabled:opacity-50"
+                title="Générer l'article 27 sections et les 5 scènes directement avec DeepSeek V4.1 Flash (Token 0 / OpenRouter)"
+              >
+                {generatingWithDeepseek ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
+                {generatingWithDeepseek ? "DeepSeek rédige..." : "🤖 Rédiger avec DeepSeek V4.1 Flash"}
               </button>
 
               <label className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
