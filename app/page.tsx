@@ -93,55 +93,104 @@ function matchImageForScene(
   ps: { fileName?: string; scene_number: number },
   idx: number,
   existingImagesByRef: Record<number, { url: string; name: string }>,
-  currentScene?: Scene
+  currentScene?: Scene,
+  usedUrls: Set<string> = new Set()
 ): { url: string; name: string } {
-  // 1. Essai de correspondance par nom nettoyé (sans extension, sans _copie, sans tiret)
+  const allImages = Object.entries(existingImagesByRef)
+    .filter(([_, img]) => img && img.url)
+    .map(([refStr, img]) => ({ ref: Number(refStr), url: img.url, name: img.name }));
+
+  if (allImages.length === 0) {
+    if (currentScene && currentScene.file_url) {
+      return { url: currentScene.file_url, name: currentScene.file_name || ps.fileName || "" };
+    }
+    return { url: "", name: ps.fileName || "" };
+  }
+
+  // Si une seule image existe au total
+  if (allImages.length === 1) {
+    return allImages[0];
+  }
+
+  const normalize = (s: string) =>
+    s.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/[-_\s]*copie[-_\s]*/gi, "")
+      .replace(/[^a-z0-9]/g, "");
+
+  // 1. Extraction du nom de fichier exact depuis le champ (ex: "MeteoClimatPro...png — Vue d'ensemble...")
+  let targetFileOnly = ps.fileName || "";
+  const fileMatch = targetFileOnly.match(/(?:Image\s*\d+\s*[-—–]\s*)?([^—–\n:]+\.(?:png|jpg|jpeg|gif|webp))/i);
+  if (fileMatch) {
+    targetFileOnly = fileMatch[1].trim();
+  }
+
+  // 1a. Correspondance EXACTE de nom de fichier (priorité absolue pour les intitulés conformes)
+  const cleanTarget = normalize(targetFileOnly);
+  if (cleanTarget.length >= 3) {
+    for (const img of allImages) {
+      if (usedUrls.has(img.url)) continue;
+      const cleanImg = normalize(img.name);
+      if (cleanImg === cleanTarget) {
+        usedUrls.add(img.url);
+        return img;
+      }
+    }
+  }
+
+  // 1b. Correspondance par inclusion de nom nettoyé (sans extension, sans _copie)
+  if (cleanTarget.length >= 5) {
+    for (const img of allImages) {
+      if (usedUrls.has(img.url)) continue;
+      const cleanImg = normalize(img.name);
+      if (cleanImg.includes(cleanTarget) || cleanTarget.includes(cleanImg)) {
+        usedUrls.add(img.url);
+        return img;
+      }
+    }
+  }
+
+  // 2. Essai par mots-clés météo (geopotentiel, 500hpa, rafales, vent, pluie, precip, sat, radar)
   if (ps.fileName) {
-    const cleanPs = ps.fileName.toLowerCase().replace(/\.[a-z0-9]+$/i, '').replace(/[-_\s]*copie[-_\s]*/gi, '').replace(/[^a-z0-9]/g, '');
-    if (cleanPs.length >= 6) {
-      for (const img of Object.values(existingImagesByRef)) {
-        const cleanImg = img.name.toLowerCase().replace(/\.[a-z0-9]+$/i, '').replace(/[-_\s]*copie[-_\s]*/gi, '').replace(/[^a-z0-9]/g, '');
-        if (cleanImg.includes(cleanPs) || cleanPs.includes(cleanImg)) {
-          return img;
+    const psLower = ps.fileName.toLowerCase();
+    const keywords = ["geopotentiel", "500-hpa", "500hpa", "rafale", "vent", "gust", "pluie", "precip", "rain", "cumul", "radar", "sat"];
+    for (const kw of keywords) {
+      if (psLower.includes(kw)) {
+        for (const img of allImages) {
+          if (usedUrls.has(img.url)) continue;
+          if (img.name.toLowerCase().includes(kw)) {
+            usedUrls.add(img.url);
+            return img;
+          }
         }
       }
     }
   }
 
-  // 2. Essai par mots-clés météo (geopotentiel, rafales, pluie, vent)
-  if (ps.fileName) {
-    const psLower = ps.fileName.toLowerCase();
-    for (const img of Object.values(existingImagesByRef)) {
-      const imgLower = img.name.toLowerCase();
-      if (psLower.includes("geopotentiel") && imgLower.includes("geopotentiel")) return img;
-      if (psLower.includes("pluie") && imgLower.includes("pluie")) return img;
-      if (psLower.includes("rafales") && imgLower.includes("rafales")) {
-        const nums = psLower.match(/\d{5,}/g) || [];
-        if (nums.some(n => imgLower.includes(n))) return img;
-      }
-    }
-  }
-
   // 3. Essai direct par numéro de scène ou ref (Scène 1 -> Image 1, Scène 2 -> Image 2...)
-  if (existingImagesByRef[ps.scene_number]) {
-    return existingImagesByRef[ps.scene_number];
-  }
-  if (existingImagesByRef[idx + 1]) {
-    return existingImagesByRef[idx + 1];
-  }
-
-  // 4. Fallback par index modulo sur l'ensemble des images disponibles
-  const allImgs = Object.values(existingImagesByRef);
-  if (allImgs.length > 0) {
-    return allImgs[idx % allImgs.length];
+  const directByScene = existingImagesByRef[ps.scene_number];
+  if (directByScene && directByScene.url && !usedUrls.has(directByScene.url)) {
+    usedUrls.add(directByScene.url);
+    return directByScene;
   }
 
-  // 5. Conserver l'image déjà présente sur la scène si existante
-  if (currentScene && currentScene.file_url) {
-    return { url: currentScene.file_url, name: currentScene.file_name || ps.fileName || "" };
+  const directByIdx = existingImagesByRef[idx + 1];
+  if (directByIdx && directByIdx.url && !usedUrls.has(directByIdx.url)) {
+    usedUrls.add(directByIdx.url);
+    return directByIdx;
   }
 
-  return { url: "", name: ps.fileName || "" };
+  // 4. Première image disponible non encore assignée (garantit zéro doublon si N images pour N scènes)
+  const firstUnused = allImages.find(img => !usedUrls.has(img.url));
+  if (firstUnused) {
+    usedUrls.add(firstUnused.url);
+    return firstUnused;
+  }
+
+  // 5. Fallback par index modulo
+  return allImages[idx % allImages.length];
 }
 
 const LAST_USER_PROMPT_SAMPLE = `=== DEBUT ARTICLE ===
@@ -777,8 +826,9 @@ export default function StudioMeteoPage() {
       // Parser les scènes avec le moteur broadcast universel
       const parsedVideoScenes = parseFullVideoScript(raw);
       if (parsedVideoScenes.length >= 2) {
+        const usedUrls = new Set<string>();
         const parsedScenes: Scene[] = parsedVideoScenes.map((ps, idx) => {
-          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx]);
+          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx], usedUrls);
           return {
             scene_number: ps.scene_number,
             badge: ps.badge,
@@ -798,6 +848,7 @@ export default function StudioMeteoPage() {
         addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec titre, badge, bandeau et voix off Charon.`, "success");
       } else if (art) {
         // Auto-création des 5 scènes broadcast si ChatGPT s'est arrêté à la fin de l'article
+        const usedUrls = new Set<string>();
         const autoScenes: Scene[] = [
           {
             scene_number: 1,
@@ -865,7 +916,7 @@ export default function StudioMeteoPage() {
             image_ref: 5
           }
         ].map((sc, i) => {
-          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i]);
+          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i], usedUrls);
           return {
             ...sc,
             file_url: matched.url,
@@ -1045,8 +1096,9 @@ export default function StudioMeteoPage() {
       const parsedVideoScenes = parseFullVideoScript(raw);
       if (parsedVideoScenes.length >= 2) {
         if (!isSilent) setArticleProgressPercent(75);
+        const usedUrls = new Set<string>();
         const parsedScenes: Scene[] = parsedVideoScenes.map((ps, idx) => {
-          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx]);
+          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx], usedUrls);
           return {
             scene_number: ps.scene_number,
             badge: ps.badge,
@@ -1087,6 +1139,7 @@ export default function StudioMeteoPage() {
       }
 
       if (art) {
+        const usedUrls = new Set<string>();
         const autoScenes: Scene[] = [
           {
             scene_number: 1,
@@ -1154,7 +1207,7 @@ export default function StudioMeteoPage() {
             image_ref: 5
           }
         ].map((sc, i) => {
-          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i]);
+          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i], usedUrls);
           return {
             ...sc,
             file_url: matched.url,
@@ -1416,9 +1469,8 @@ export default function StudioMeteoPage() {
       });
 
       const publicUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/${remotePath}`;
-      const targetRef = scenes[index]?.image_ref || (index + 1);
       const nextScenes = scenes.map((sc, i) => {
-        if (i === index || (sc.image_ref && sc.image_ref === targetRef)) {
+        if (i === index) {
           return { ...sc, file_url: publicUrl, file_name: file.name };
         }
         return sc;
@@ -1464,24 +1516,46 @@ export default function StudioMeteoPage() {
       const normalize = (s: string) =>
         s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
+      const usedUrlsInUpload = new Set<string>();
       const nextScenes = scenes.map((sc, i) => {
         let chosen = uploaded[(sc.image_ref ? sc.image_ref - 1 : i) % uploaded.length];
 
         if (sc.image_hint) {
-          const hintWords = normalize(sc.image_hint)
-            .split(/\s+/)
-            .filter(w => w.length >= 3 && w !== "image" && w !== "carte" && !/^\d+$/.test(w));
+          let targetHintFile = sc.image_hint;
+          const fnM = targetHintFile.match(/(?:Image\s*\d+\s*[-—–]\s*)?([^—–\n:]+\.(?:png|jpg|jpeg|gif|webp))/i);
+          if (fnM) targetHintFile = fnM[1].trim();
 
-          let bestScore = 0;
-          for (const up of uploaded) {
-            const normFile = normalize(up.name.replace(/\.[^.]+$/, ""));
-            const score = hintWords.filter(hw => normFile.includes(hw)).length;
-            if (score > bestScore) {
-              bestScore = score;
-              chosen = up;
+          const normHint = normalize(targetHintFile);
+          // 1. Match exact si les intitulés correspondent parfaitement
+          const exactUp = uploaded.find(up => !usedUrlsInUpload.has(up.url) && normalize(up.name) === normHint);
+          if (exactUp) {
+            chosen = exactUp;
+          } else {
+            // 2. Match par mots-clés du hint
+            const hintWords = normHint
+              .split(/\s+/)
+              .filter(w => w.length >= 3 && w !== "image" && w !== "carte" && !/^\d+$/.test(w));
+
+            let bestScore = 0;
+            for (const up of uploaded) {
+              if (usedUrlsInUpload.has(up.url) && uploaded.length >= scenes.length) continue;
+              const normFile = normalize(up.name.replace(/\.[^.]+$/, ""));
+              const score = hintWords.filter(hw => normFile.includes(hw)).length;
+              if (score > bestScore) {
+                bestScore = score;
+                chosen = up;
+              }
             }
           }
         }
+
+        // Si l'image a déjà été utilisée et qu'il reste des images non attribuées
+        if (usedUrlsInUpload.has(chosen.url) && uploaded.length > usedUrlsInUpload.size) {
+          const unused = uploaded.find(u => !usedUrlsInUpload.has(u.url));
+          if (unused) chosen = unused;
+        }
+
+        usedUrlsInUpload.add(chosen.url);
 
         return {
           ...sc,

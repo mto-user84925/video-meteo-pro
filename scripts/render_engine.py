@@ -245,6 +245,12 @@ def render(job_file):
     print(f"🎙️ Voix off unique : {voice_dur:.1f}s ({sum(len(s['script_text'].split()) for s in scenes_data)} mots)")
     progress(session_id, 18, f"✅ Voix off prête ({voice_dur:.0f}s) - téléchargement des visuels...", "voice")
 
+    unique_files = set(sc_in.get("file", "") for sc_in in scenes_data if sc_in.get("file"))
+    is_single_image_mode = (len(unique_files) == 1 and len(scenes_data) > 1)
+    if is_single_image_mode:
+        print("💡 Mode Visuel Unique Détecté : Application automatique de cadrages broadcast dynamiques multi-angles (Plan large, Zoom Nord-Ouest, Zoom Centre, Focus Cœur, Vue finale) !")
+        progress(session_id, 19, "🎬 Adaptation multi-angles broadcast (visuel unique)...", "info")
+
     for idx, sc_in in enumerate(scenes_data):
         sc_id = f"scene{idx+1}"
         file_input = sc_in["file"]
@@ -257,6 +263,29 @@ def render(job_file):
             shutil.copyfile(file_input, local_file)
 
         is_gif = local_file.lower().endswith(".gif")
+
+        # Cadrages broadcast multi-angles si une seule image est fournie
+        if is_single_image_mode and not is_gif:
+            try:
+                with Image.open(local_file) as im:
+                    im_w, im_h = im.size
+                    framed_file = os.path.join(work_dir, f"{sc_id}_angle.png")
+                    if idx == 0:
+                        im.save(framed_file)
+                    elif idx == 1:
+                        crop_box = (0, 0, int(im_w * 0.80), int(im_h * 0.80))
+                        im.crop(crop_box).save(framed_file)
+                    elif idx == 2:
+                        crop_box = (int(im_w * 0.20), int(im_h * 0.08), im_w, int(im_h * 0.88))
+                        im.crop(crop_box).save(framed_file)
+                    elif idx == 3:
+                        crop_box = (int(im_w * 0.16), int(im_h * 0.16), int(im_w * 0.84), int(im_h * 0.84))
+                        im.crop(crop_box).save(framed_file)
+                    else:
+                        im.save(framed_file)
+                    local_file = framed_file
+            except Exception as e_crop:
+                print(f"⚠️ Cadrage dynamique multi-angles ignoré : {e_crop}")
         
         dur = scene_durs[idx]
         progress(session_id, 20 + int(25 * (idx + 1) / len(scenes_data)), f"🖼️ Scène {idx+1}/{len(scenes_data)} préparée ({dur:.1f}s)", "info")

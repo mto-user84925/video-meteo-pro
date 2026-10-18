@@ -450,97 +450,115 @@ export interface ParsedVideoScene {
 }
 
 export function parseFullVideoScript(text: string): ParsedVideoScene[] {
-  // 1. Extraire les Voix off par numéro de scène
-  const voiceOffByScene: Record<number, string> = {};
-  const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*(\d+)[^\n]*\n([\s\S]*?)(?=(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*\d+\b|$)/gi;
-  let scM: RegExpExecArray | null;
-  while ((scM = sceneRegex.exec(text)) !== null) {
-    const scNum = Number(scM[1]);
-    const body = scM[2];
-    const voMatch = body.match(/Voix\s+off(?:\s+Charon)?[^:\n]*:\s*(?:[«"]([^»"]+)[»"]|([^\n]+(?:\n(?!(?:Bandeau|Localisation|Sous-titre|Titre|Badge|Image|Dur[ée]e|SC[ÈE]NE|\*\*))[^\n]+)*))/i);
-    if (voMatch) {
-      voiceOffByScene[scNum] = (voMatch[1] || voMatch[2] || "").trim().replace(/^["«]|["»]$/g, "").trim();
-    }
-  }
-
-  // 2. Extraire les fiches visuelles
-  const visualCards: Array<{
-    title: string;
-    sub: string;
-    badge: string;
-    ticker: string;
-    location: string;
-    fileName: string;
-    imageHint: string;
-  }> = [];
-
-  const cardSplits = text.split(/(?=(?:^|\n)\s*Bandeau Infos M[ée]t[ée]o\s*:)/i);
-  for (const block of cardSplits) {
-    if (!block.toLowerCase().includes("image à utiliser")) continue;
-    const card = { title: "", sub: "", badge: "", ticker: "", location: "FRANCE", fileName: "", imageHint: "" };
-    const lines = block.split(/\r?\n/);
-    for (const l of lines) {
-      const kv = l.trim().match(/^([^:]+):\s*(.+)$/);
-      if (kv) {
-        const k = kv[1].toLowerCase().trim();
-        const v = kv[2].trim();
-        if (k.includes("bandeau") || k.includes("ticker")) card.ticker = v;
-        else if (k.includes("localisation") || k.includes("lieu")) card.location = v.toUpperCase();
-        else if (k.startsWith("sous-titre") || k.startsWith("sous titre")) card.sub = v.toUpperCase();
-        else if (k.startsWith("titre")) card.title = v.toUpperCase();
-        else if (k.includes("badge")) card.badge = v.toUpperCase();
-        else if (k.includes("image")) {
-          card.imageHint = v;
-          const fnM = v.match(/([a-zA-Z0-9_.-]+\.(?:png|jpg|jpeg|gif|webp))/i);
-          if (fnM) card.fileName = fnM[1];
-        }
-      }
-    }
-    if (card.title || card.badge || card.imageHint || card.fileName) {
-      visualCards.push(card);
-    }
-  }
-
-  // 3. Associer intelligemment chaque carte visuelle à sa scène correspondante (1 à 5)
   const defaultBadges = ["SURVEILLANCE MÉTÉO", "ANALYSE MÉTÉO", "ZONES EXPOSÉES", "RAFALES MAXIMALES", "FORTES PLUIES"];
   const defaultTitles = ["RISQUE DE TEMPÊTE", "DÉPRESSIONS ATLANTIQUES", "LE NORD-OUEST EXPOSÉ", "POINTES À PLUS DE 100 KM/H", "SITUATION À SURVEILLER"];
 
   const scenes: ParsedVideoScene[] = [];
-  for (let s = 1; s <= 5; s++) {
-    const vo = voiceOffByScene[s] || "";
-    let bestCard = null;
-    let bestScore = -1;
+  const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*(\d+)\b[^\n]*\n([\s\S]*?)(?=(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*\d+\b|$)/gi;
+  let scM: RegExpExecArray | null;
 
-    for (const card of visualCards) {
-      const cardStr = `${card.title} ${card.sub} ${card.badge} ${card.ticker} ${card.imageHint} ${card.fileName}`.toLowerCase();
-      let score = 0;
+  while ((scM = sceneRegex.exec(text)) !== null) {
+    const scNum = Number(scM[1]);
+    const body = scM[2];
 
-      if (s === 1 && (cardStr.includes("tempête") || cardStr.includes("agitée") || cardStr.includes("séquence") || cardStr.includes("tempétueux") || cardStr.includes("surveillance"))) score += 10;
-      if (s === 2 && (cardStr.includes("atlantique") || cardStr.includes("984") || cardStr.includes("dépression") || cardStr.includes("géopotentiel") || cardStr.includes("analyse"))) score += 10;
-      if (s === 3 && (cardStr.includes("bretagne") || cardStr.includes("normandie") || cardStr.includes("pays de la loire") || cardStr.includes("zones exposées") || cardStr.includes("sous le vent"))) score += 10;
-      if (s === 4 && (cardStr.includes("108") || cardStr.includes("côtes normandes") || cardStr.includes("plus de 100") || cardStr.includes("rafales maximales"))) score += 10;
-      if (s === 5 && (cardStr.includes("pluie") || cardStr.includes("sud-est") || cardStr.includes("cumul") || cardStr.includes("fortes pluies") || cardStr.includes("prudence"))) score += 10;
+    let title = "";
+    let sub = "";
+    let badge = "";
+    let location_tag = "FRANCE";
+    let ticker = "";
+    let script_text = "";
+    let fileName = "";
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestCard = card;
+    const lines = body.split(/\r?\n/);
+    for (const rawLine of lines) {
+      const l = rawLine.trim().replace(/^[-*•]\s*/, "");
+      const kv = l.match(/^([^:]+):\s*(.+)$/);
+      if (!kv) continue;
+      const k = kv[1].toLowerCase().trim().replace(/\*\*/g, "");
+      const v = kv[2].trim().replace(/\*\*/g, "");
+
+      if (k.includes("voix off") || k.includes("script") || k === "charon" || k.includes("voix-off")) {
+        script_text = v.replace(/^["«]|["»]$/g, "").trim();
+      } else if (k.includes("bandeau") || k.includes("ticker") || k.includes("infos meteo")) {
+        ticker = v;
+      } else if (k.includes("localisation") || k.includes("lieu") || k.includes("zone")) {
+        location_tag = v.toUpperCase();
+      } else if (k.startsWith("sous-titre") || k.startsWith("sous titre") || k === "sub") {
+        sub = v.toUpperCase();
+      } else if (k.startsWith("titre") || k === "title") {
+        title = v.toUpperCase();
+      } else if (k.includes("badge")) {
+        badge = v.toUpperCase();
+      } else if (k.includes("image") || k.includes("visuel") || k.includes("fichier")) {
+        // Supporter les noms Mac avec espaces, apostrophes, accents (ex: Capture d’écran 2026-10-18 à 14.30.01.png)
+        const fnM = v.match(/(?:Image\s*\d+\s*[-—–]\s*)?([^—–\n:]+\.(?:png|jpg|jpeg|gif|webp))/i);
+        if (fnM) {
+          fileName = fnM[1].trim();
+        } else {
+          fileName = v;
+        }
       }
     }
 
-    if (!bestCard && visualCards.length >= s) {
-      bestCard = visualCards[s - 1];
+    if (!script_text) {
+      const voMatch = body.match(/Voix\s+off(?:\s+Charon)?[^:\n]*:\s*(?:[«"]([^»"]+)[»"]|([^\n]+(?:\n(?!(?:Bandeau|Localisation|Sous-titre|Titre|Badge|Image|Dur[ée]e|SC[ÈE]NE|\*\*))[^\n]+)*))/i);
+      if (voMatch) {
+        script_text = (voMatch[1] || voMatch[2] || "").trim().replace(/^["«]|["»]$/g, "").trim();
+      }
     }
 
+    const idx = scenes.length;
     scenes.push({
-      scene_number: s,
-      title: bestCard?.title || defaultTitles[s - 1],
-      sub: bestCard?.sub || "",
-      badge: bestCard?.badge || defaultBadges[s - 1],
-      ticker: bestCard?.ticker || "",
-      location_tag: bestCard?.location || "FRANCE",
-      fileName: bestCard?.fileName || "",
-      script_text: vo
+      scene_number: scNum,
+      title: title || defaultTitles[idx % defaultTitles.length],
+      sub: sub || "",
+      badge: badge || defaultBadges[idx % defaultBadges.length],
+      ticker: ticker || "",
+      location_tag: location_tag || "FRANCE",
+      fileName: fileName || "",
+      script_text: script_text || ""
     });
+  }
+
+  // Fallback si la structure SCÈNE N n'a pas été détectée mais que le texte contient des cartes isolées
+  if (scenes.length === 0) {
+    const cardSplits = text.split(/(?=(?:^|\n)\s*Bandeau Infos M[ée]t[ée]o\s*:)/i);
+    for (let i = 0; i < cardSplits.length; i++) {
+      const block = cardSplits[i];
+      if (!block.toLowerCase().includes("image à utiliser") && !block.toLowerCase().includes("voix off")) continue;
+      const card = { title: "", sub: "", badge: "", ticker: "", location: "FRANCE", fileName: "", script_text: "" };
+      const lines = block.split(/\r?\n/);
+      for (const l of lines) {
+        const kv = l.trim().match(/^([^:]+):\s*(.+)$/);
+        if (kv) {
+          const k = kv[1].toLowerCase().trim();
+          const v = kv[2].trim();
+          if (k.includes("bandeau") || k.includes("ticker")) card.ticker = v;
+          else if (k.includes("localisation") || k.includes("lieu")) card.location = v.toUpperCase();
+          else if (k.startsWith("sous-titre") || k.startsWith("sous titre")) card.sub = v.toUpperCase();
+          else if (k.startsWith("titre")) card.title = v.toUpperCase();
+          else if (k.includes("badge")) card.badge = v.toUpperCase();
+          else if (k.includes("voix off")) card.script_text = v.replace(/^["«]|["»]$/g, "").trim();
+          else if (k.includes("image")) {
+            const fnM = v.match(/(?:Image\s*\d+\s*[-—–]\s*)?([^—–\n:]+\.(?:png|jpg|jpeg|gif|webp))/i);
+            card.fileName = fnM ? fnM[1].trim() : v;
+          }
+        }
+      }
+      if (card.title || card.badge || card.script_text) {
+        const scNum = scenes.length + 1;
+        scenes.push({
+          scene_number: scNum,
+          title: card.title || defaultTitles[(scNum - 1) % defaultTitles.length],
+          sub: card.sub || "",
+          badge: card.badge || defaultBadges[(scNum - 1) % defaultBadges.length],
+          ticker: card.ticker || "",
+          location_tag: card.location || "FRANCE",
+          fileName: card.fileName || "",
+          script_text: card.script_text || ""
+        });
+      }
+    }
   }
 
   return scenes;
