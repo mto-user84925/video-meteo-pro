@@ -21,6 +21,8 @@ interface Scene {
   script_text: string;
   file_url?: string;
   file_name?: string;
+  image_ref?: number;
+  image_hint?: string;
 }
 
 const BADGE_PRESETS = [
@@ -30,6 +32,56 @@ const BADGE_PRESETS = [
   { badge: "CUMULS & IMPACTS", color: [20, 150, 60] },
   { badge: "VIGILANCE & CONSEILS", color: [220, 30, 30] }
 ];
+
+function getBadgeColor(badgeText: string, sceneIndex: number): number[] {
+  const b = (badgeText || "").toUpperCase();
+  if (b.includes("SYNOPTIQUE") || b.includes("ANALYSE") || b.includes("ALTITUDE")) return [30, 120, 240];
+  if (b.includes("CHRONOLOGIE") || b.includes("CALENDRIER") || b.includes("PHASAGE")) return [230, 80, 20];
+  if (b.includes("CUMUL") || b.includes("VENT") || b.includes("IMPACT") || b.includes("PLUIE")) return [20, 150, 60];
+  if (b.includes("ALERTE") || b.includes("VIGILANCE") || b.includes("PRUDENCE") || b.includes("CHANGEMENT")) return [220, 30, 30];
+  return [...BADGE_PRESETS[sceneIndex % BADGE_PRESETS.length].color];
+}
+
+const LAST_USER_PROMPT_SAMPLE = `SCÈNE 1
+- Image à utiliser : Image 1 — ECMWF AIFS, précipitations cumulées
+- Badge : CHANGEMENT MÉTÉO
+- Titre : PLUIE ET VENT REVIENNENT
+- Sous-titre : CHANGEMENT DÈS MERCREDI
+- Localisation : MOITIÉ NORD
+- Bandeau Infos Météo : Dès le 21 octobre, retour des perturbations par l’ouest.
+- Voix off Charon : Attention, pluie et vent reviennent dès mercredi au nord !
+SCÈNE 2
+- Image à utiliser : Image 2 — ECMWF IFS, rafales maximales cumulées
+- Badge : ANALYSE SYNOPTIQUE
+- Titre : LE BLOCAGE RECULE
+- Sous-titre : LE FLUX OCÉANIQUE REVIENT
+- Localisation : ATLANTIQUE NORD
+- Bandeau Infos Météo : Le 21 octobre, le flux atlantique reprend vers la France.
+- Voix off Charon : En altitude, un vaste creux dépressionnaire atlantique se rapproche des îles Britanniques. L’anticyclone recule vers les Açores, tandis que le courant d’ouest reprend progressivement sa place, ouvrant le passage aux perturbations sur le nord.
+SCÈNE 3
+- Image à utiliser : Image 3 — GFS, géopotentiel à 500 hPa
+- Badge : CHRONOLOGIE
+- Titre : LES PLUIES GAGNENT DU TERRAIN
+- Sous-titre : DE MERCREDI À VENDREDI
+- Localisation : OUEST PUIS NORD
+- Bandeau Infos Météo : Du 21 au 23 octobre, les pluies progressent vers l’intérieur.
+- Voix off Charon : Mercredi vingt et un octobre, les premières pluies gagnent la Bretagne, la Normandie et les Pays de la Loire. Jeudi puis vendredi, elles progressent vers le Bassin parisien et le Centre, accompagnées de vent.
+SCÈNE 4
+- Image à utiliser : Image 1 — ECMWF AIFS, précipitations cumulées
+- Badge : VENTS & IMPACTS
+- Titre : UN COUP DE VENT POSSIBLE
+- Sous-titre : INTENSITÉ ENCORE INCERTAINE
+- Localisation : MANCHE / NORD
+- Bandeau Infos Météo : Vendredi : scénario à plus de 100 km/h en mer, 80 à terre.
+- Voix off Charon : Vendredi, un scénario envisage des rafales dépassant cent kilomètres par heure sur le littoral, contre quatre-vingts dans les terres. Finistère, Manche et Pas-de-Calais sont à surveiller. Ces pluies aideront les sols, sans effacer la sécheresse.
+SCÈNE 5
+- Image à utiliser : Image 2 — ECMWF IFS, rafales maximales cumulées
+- Badge : PRUDENCE
+- Titre : VENDREDI SOUS SURVEILLANCE
+- Sous-titre : LE SCÉNARIO RESTE À AFFINER
+- Localisation : MOITIÉ NORD
+- Bandeau Infos Météo : Pic venteux possible le 23 octobre : prévisions à suivre.
+- Voix off Charon : Le pic venteux reste possible vendredi, mais sa trajectoire et son intensité sont encore incertaines. Fixez les objets exposés, adaptez vos déplacements aux prévisions actualisées… et restez connectés avec METEO CLIMAT PRO.`;
 
 function createEmptyScenes(count = 5): Scene[] {
   return Array.from({ length: count }, (_, i) => {
@@ -77,6 +129,8 @@ export default function StudioMeteoPage() {
   const [articleUrl, setArticleUrl] = useState("");
   const [importingArticle, setImportingArticle] = useState(false);
   const [importSuccessMessage, setImportSuccessMessage] = useState("");
+  const [manualPromptText, setManualPromptText] = useState("");
+  const [uploadingBatch, setUploadingBatch] = useState(false);
 
   const [phenomenon, setPhenomenon] = useState(PHENOMENONS[0]);
   const [customPhenomenon, setCustomPhenomenon] = useState("");
@@ -114,6 +168,7 @@ export default function StudioMeteoPage() {
 
   const handleResetAll = () => {
     setArticleUrl("");
+    setManualPromptText("");
     setTopic("");
     setNotes("");
     setImportSuccessMessage("");
@@ -122,6 +177,152 @@ export default function StudioMeteoPage() {
     setResultLandscape(null);
     setLogs([]);
     setSessionId(null);
+  };
+
+  // PARSEUR UNIVERSEL 1-CLIC DU RÉSULTAT DE PROMPT IA (Format Texte SCÈNE 1..5 ou JSON)
+  const handleParseManualPrompt = (textOverride?: string) => {
+    const raw = (textOverride ?? manualPromptText).trim();
+    if (!raw) {
+      alert("Veuillez coller le résultat généré par votre prompt IA.");
+      return;
+    }
+    if (textOverride) setManualPromptText(textOverride);
+
+    // Conserver un dictionnaire des images déjà présentes par numéro (Image 1 -> index 0, etc.)
+    const existingImagesByRef: Record<number, { url: string; name: string }> = {};
+    scenes.forEach((sc, idx) => {
+      if (sc.file_url) {
+        const refNum = sc.image_ref || idx + 1;
+        if (!existingImagesByRef[refNum]) {
+          existingImagesByRef[refNum] = { url: sc.file_url, name: sc.file_name || `Image_${refNum}` };
+        }
+      }
+    });
+
+    // 1. Extraction des blocs "SCÈNE 1", "SCÈNE 2"...
+    const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+(\d+)[^\n]*\n([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+\d+|\n\s*(?:#+\s*|\*\*)*PARTIE\s+\d+|\n\s*```|$))/gi;
+    const matches = [...raw.matchAll(sceneRegex)];
+
+    if (matches.length >= 2) {
+      const parsedScenes: Scene[] = matches.map((m, idx) => {
+        const sceneNum = Number(m[1]) || idx + 1;
+        const body = m[2] || "";
+        const lines = body.split("\n");
+
+        let badge = BADGE_PRESETS[idx % BADGE_PRESETS.length].badge;
+        let title = "";
+        let sub = "";
+        let location_tag = "";
+        let ticker = "";
+        let script_text = "";
+        let image_ref: number | undefined = undefined;
+        let image_hint: string | undefined = undefined;
+        let lastField = "";
+
+        for (const rawLine of lines) {
+          const line = rawLine.replace(/^\s*[-*•]+\s*/, "").replace(/\*\*/g, "").trim();
+          if (!line) continue;
+
+          const kv = line.match(/^([^:]+):\s*(.+)$/);
+          if (kv) {
+            const key = kv[1].trim().toLowerCase();
+            const val = kv[2].trim();
+
+            if (key.includes("image")) {
+              image_hint = val;
+              const numM = val.match(/image\s*(\d+)/i) || val.match(/(\d+)/);
+              if (numM) image_ref = Number(numM[1]);
+              lastField = "image";
+            } else if (key.includes("badge")) {
+              badge = val.toUpperCase();
+              lastField = "badge";
+            } else if (key.startsWith("sous-titre") || key.startsWith("sous titre")) {
+              sub = val.toUpperCase();
+              lastField = "sub";
+            } else if (key.startsWith("titre")) {
+              title = val.toUpperCase();
+              lastField = "title";
+            } else if (key.includes("localisation") || key.includes("lieu") || key.includes("région") || key.includes("region")) {
+              location_tag = val.toUpperCase();
+              lastField = "location";
+            } else if (key.includes("bandeau") || key.includes("ticker") || key.includes("infos météo")) {
+              ticker = val;
+              lastField = "ticker";
+            } else if (key.includes("voix off") || key.includes("script") || key.includes("charon") || key.includes("texte")) {
+              script_text = val;
+              lastField = "script";
+            } else if (lastField === "script") {
+              script_text += " " + line;
+            }
+          } else if (lastField === "script") {
+            script_text += " " + line;
+          }
+        }
+
+        const refToUse = image_ref || idx + 1;
+        const matchedImg = existingImagesByRef[refToUse];
+
+        return {
+          scene_number: sceneNum,
+          badge,
+          badge_color: getBadgeColor(badge, idx),
+          title,
+          sub,
+          location_tag,
+          ticker,
+          script_text: script_text.trim(),
+          file_url: matchedImg?.url || "",
+          file_name: matchedImg?.name || "",
+          image_ref: refToUse,
+          image_hint
+        };
+      });
+
+      setScenes(parsedScenes);
+      if (parsedScenes[0]?.title) setTopic(parsedScenes[0].title);
+      setImportSuccessMessage(`✅ Les ${parsedScenes.length} scènes du prompt ont été remplies automatiquement en 1 clic ! Il ne vous reste plus qu'à glisser vos images (Image 1, 2, 3...).`);
+      return;
+    }
+
+    // 2. Fallback JSON si l'utilisateur a collé le bloc JSON de la Partie 4
+    try {
+      const s = raw.indexOf("{");
+      const e = raw.lastIndexOf("}");
+      const jsonStr = s !== -1 && e > s ? raw.slice(s, e + 1) : raw;
+      const parsed = JSON.parse(jsonStr);
+      const arr = Array.isArray(parsed) ? parsed : parsed.scenes;
+      if (Array.isArray(arr) && arr.length >= 2) {
+        const parsedScenes: Scene[] = arr.map((sc: any, idx: number) => {
+          const refToUse = Number(sc.image_index || sc.image_ref) || idx + 1;
+          const matchedImg = existingImagesByRef[refToUse];
+          const badge = (sc.badge || BADGE_PRESETS[idx % BADGE_PRESETS.length].badge).toUpperCase();
+          return {
+            scene_number: idx + 1,
+            badge,
+            badge_color: Array.isArray(sc.badge_color) ? sc.badge_color : getBadgeColor(badge, idx),
+            title: (sc.title || "").toUpperCase(),
+            sub: (sc.sub || "").toUpperCase(),
+            location_tag: (sc.location_tag || "").toUpperCase(),
+            ticker: sc.ticker || "",
+            script_text: sc.script_text || "",
+            file_url: matchedImg?.url || "",
+            file_name: matchedImg?.name || "",
+            image_ref: refToUse,
+            image_hint: sc.image_index ? `Image ${sc.image_index}` : undefined
+          };
+        });
+        setScenes(parsedScenes);
+        if (parsed.phenomenon) {
+          setIsCustomPhenomenon(true);
+          setCustomPhenomenon(parsed.phenomenon);
+        }
+        if (parsedScenes[0]?.title) setTopic(parsedScenes[0].title);
+        setImportSuccessMessage(`✅ Les ${parsedScenes.length} scènes JSON ont été remplies automatiquement en 1 clic !`);
+        return;
+      }
+    } catch {}
+
+    alert("Format non reconnu. Collez le texte contenant 'SCÈNE 1 ... SCÈNE 5' ou le bloc JSON.");
   };
 
   useEffect(() => {
@@ -237,7 +438,7 @@ export default function StudioMeteoPage() {
     }
   };
 
-  // Upload manuel d'une image vers Supabase Storage
+  // Upload manuel d'une image vers Supabase Storage (avec propagation automatique aux scènes utilisant la même Image N)
   const handleFileUpload = async (index: number, file: File) => {
     const sId = sessionId || `session_${Date.now()}`;
     if (!sessionId) setSessionId(sId);
@@ -258,13 +459,66 @@ export default function StudioMeteoPage() {
       });
 
       const publicUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/${remotePath}`;
-      const nextScenes = [...scenes];
-      nextScenes[index].file_url = publicUrl;
-      nextScenes[index].file_name = file.name;
+      const targetRef = scenes[index]?.image_ref || (index + 1);
+      const nextScenes = scenes.map((sc, i) => {
+        if (i === index || (sc.image_ref && sc.image_ref === targetRef)) {
+          return { ...sc, file_url: publicUrl, file_name: file.name };
+        }
+        return sc;
+      });
       setScenes(nextScenes);
     } catch (e) {
       console.error(e);
       alert("Erreur d'upload vers Supabase.");
+    }
+  };
+
+  // Upload en lot de plusieurs images (Image 1, Image 2, Image 3...) en un seul clic
+  const handleBatchFilesUpload = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    const sId = sessionId || `session_${Date.now()}`;
+    if (!sessionId) setSessionId(sId);
+    setUploadingBatch(true);
+
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (file, idx) => {
+          const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+          const remotePath = `renders/${sId}/batch_${idx + 1}_${Date.now()}_${safeName}`;
+          const uploadUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/blog-images/${remotePath}`;
+          await fetch(uploadUrl, {
+            method: "POST",
+            headers: {
+              "apikey": "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
+              "Authorization": "Bearer sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
+              "Content-Type": file.type || "application/octet-stream"
+            },
+            body: file
+          });
+          return {
+            url: `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/${remotePath}`,
+            name: file.name
+          };
+        })
+      );
+
+      const nextScenes = scenes.map((sc, i) => {
+        const refIdx = (sc.image_ref ? sc.image_ref - 1 : i) % uploaded.length;
+        const chosen = uploaded[refIdx];
+        return {
+          ...sc,
+          file_url: chosen.url,
+          file_name: chosen.name
+        };
+      });
+      setScenes(nextScenes);
+      setImportSuccessMessage(`✅ ${uploaded.length} image(s) téléversée(s) et réparties automatiquement sur les ${nextScenes.length} scènes !`);
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors de l'envoi groupé des images.");
+    } finally {
+      setUploadingBatch(false);
     }
   };
 
@@ -495,6 +749,60 @@ export default function StudioMeteoPage() {
               {importSuccessMessage}
             </div>
           )}
+
+          {/* 📋 NOUVEAU : COLLER DIRECTEMENT LE RÉSULTAT DU PROMPT IA EN 1 CLIC + UPLOAD GROUPÉ DES IMAGES */}
+          <div className="mt-5 pt-5 border-t border-slate-800/80 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40 mr-2">
+                  Mode Prompt Manuel 1 Clic
+                </span>
+                <span className="text-xs md:text-sm font-bold text-white">
+                  Collez ici le résultat de votre Prompt (SCÈNE 1 à 5 ou JSON) : tout se remplit tout seul !
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleParseManualPrompt(LAST_USER_PROMPT_SAMPLE)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold flex items-center gap-1.5 cursor-pointer w-fit shrink-0 transition"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Charger votre script « Pluie & Vent Mercredi »
+              </button>
+            </div>
+
+            <textarea
+              rows={4}
+              placeholder={"Collez ici le texte généré par votre Prompt IA :\nSCÈNE 1\n- Image à utiliser : Image 1...\n- Badge : ...\n- Titre : ...\n- Sous-titre : ...\n- Localisation : ...\n- Bandeau Infos Météo : ...\n- Voix off Charon : ..."}
+              value={manualPromptText}
+              onChange={e => setManualPromptText(e.target.value)}
+              className="w-full bg-slate-950/90 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono leading-relaxed"
+            />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleParseManualPrompt()}
+                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" /> ⚡ Remplir toutes les scènes en 1 clic
+              </button>
+
+              <label className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
+                {uploadingBatch ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {uploadingBatch ? "Téléversement..." : "🖼️ Importer mes images (Image 1, 2, 3...) d'un coup"}
+                <input
+                  type="file"
+                  accept="image/*,.gif"
+                  multiple
+                  className="hidden"
+                  onChange={e => handleBatchFilesUpload(e.target.files)}
+                />
+              </label>
+              <span className="text-[11px] text-slate-400">
+                Astuce : sélectionnez vos 3 cartes en même temps, elles se placent automatiquement sur les scènes 1 à 5 (Image 1 → Scènes 1 & 4, Image 2 → Scènes 2 & 5, Image 3 → Scène 3).
+              </span>
+            </div>
+          </div>
         </section>
 
         {/* ÉTAPE 1 (OPTIONNELLE) : PARAMÈTRES DU SUJET */}
@@ -628,6 +936,12 @@ export default function StudioMeteoPage() {
                     )}
                   </div>
 
+                  {sc.image_hint && (
+                    <div className="mb-1.5 px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-300 font-semibold truncate" title={sc.image_hint}>
+                      📌 {sc.image_hint}
+                    </div>
+                  )}
+
                   {/* APERÇU VIGNETTE DE LA CARTE */}
                   <div className="w-full h-36 rounded-xl overflow-hidden relative border border-slate-700 bg-slate-950 group shadow-inner">
                     {sc.file_url ? (
@@ -645,7 +959,7 @@ export default function StudioMeteoPage() {
                           className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
                         />
                         <div className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-bold text-emerald-400 border border-emerald-500/40 flex items-center gap-1 shadow">
-                          <CheckCircle2 className="w-3 h-3" /> {i === 0 ? "Couverture" : `Carte ${i + 1}`}
+                          <CheckCircle2 className="w-3 h-3" /> {sc.image_ref ? `Image ${sc.image_ref}` : (i === 0 ? "Couverture" : `Carte ${i + 1}`)}
                         </div>
                         <label className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all text-xs text-white font-bold gap-1.5 cursor-pointer backdrop-blur-xs">
                           <Upload className="w-4 h-4 text-sky-400" /> Remplacer
@@ -666,7 +980,7 @@ export default function StudioMeteoPage() {
                           onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
                         />
                         <ImageIcon className="w-5 h-5 text-slate-500 mb-1" />
-                        <span className="text-[11px] font-semibold text-slate-400">{i === 0 ? "Photo Couverture" : "Ajouter une carte"}</span>
+                        <span className="text-[11px] font-semibold text-slate-400">{sc.image_ref ? `Ajouter Image ${sc.image_ref}` : (i === 0 ? "Photo Couverture" : "Ajouter une carte")}</span>
                         <span className="text-[9px] text-slate-600">PNG, JPG, GIF</span>
                       </label>
                     )}
