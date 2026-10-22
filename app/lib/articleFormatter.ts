@@ -273,6 +273,8 @@ Tu peux réutiliser un fichier avec un cadrage différent. Préserve les repère
 
 - **RÈGLE OBLIGATOIRE D'INSERTION DE TOUTES LES IMAGES** : Insère impérativement dans l'article l'ensemble des images et cartes fournies (IMAGE 1, IMAGE 2, IMAGE 3, IMAGE 4, IMAGE 5... jusqu'à 10 images si fournies). Répartis-les harmonieusement entre les différentes sections pour illustrer l'intégralité des données, des échéances et des zones modélisées. Aucune carte fournie ne doit être laissée de côté.
 
+- **RÈGLE OBLIGATOIRE DE RÉPARTITION — INTERDICTION DE REGROUPER** : chaque image doit être insérée **à sa propre place** dans l'article, immédiatement après le paragraphe qu'elle illustre. Il est **strictement interdit** de regrouper plusieurs images dans un même paragraphe, de les empiler à la fin de l'article, ou de remplacer plusieurs marqueurs par un seul bloc « IMAGE 4, IMAGE 5... ». Une image par emplacement, au fil des sections, du début jusqu'à la fin. La dernière image doit apparaître **avant** le bloc « Sources ».
+
 Dans chaque champ **« Image à utiliser »**, recopie le nom complet exact du fichier, extension comprise, puis précise l’échéance ou la portion à diffuser et le cadrage utile.
 
 ---
@@ -352,11 +354,11 @@ CATEGORIE : [Choisir : Actualités Météo / Analyses Climatologiques / Vigilanc
 
 [IMAGE 3 — Si un troisième visuel pertinent est exploitable : nom complet exact et légende complète.]
 
-[IMAGE 4, IMAGE 5... JUSQU'À 10 IMAGES — Insérer impérativement toutes les autres images fournies, réparties au fil des sections (sous le tableau, après les facteurs déterminants, dans la fiabilité ou avant la conclusion), avec pour chaque image son numéro et sa légende complète.]
-
 **À ne pas interpréter comme [une certitude absolue / un seuil uniforme / une observation] :**
 
 [Deux à quatre phrases sur les limites d’interprétation, les variations locales et les incertitudes pertinentes.]
+
+[IMAGE 4 — Si un quatrième visuel est disponible : nom complet exact et légende complète.]
 
 **Les 4 facteurs déterminants à surveiller**
 
@@ -365,9 +367,13 @@ CATEGORIE : [Choisir : Actualités Météo / Analyses Climatologiques / Vigilanc
 - **[EMOJI] [Facteur 3] :** [Explication courte.]
 - **[EMOJI] [Facteur 4] :** [Explication courte.]
 
+[IMAGE 5 — Si un cinquième visuel est disponible : nom complet exact et légende complète.]
+
 **Fiabilité des prévisions et échéances**
 
 [120 à 180 mots distinguant les éléments étayés de ceux restant à affiner. Ne pas affirmer un accord entre plusieurs modèles ou runs sans les avoir effectivement comparés. Expliquer les limites météorologiques utiles au lecteur.]
+
+[IMAGE 6 — Si un sixième visuel est disponible : nom complet exact et légende complète.]
 
 **FAQ sur [sujet principal]**
 
@@ -391,15 +397,23 @@ CATEGORIE : [Choisir : Actualités Météo / Analyses Climatologiques / Vigilanc
 
 [Réponse directe en deux à trois phrases.]
 
+[IMAGE 7 — Si un septième visuel est disponible : nom complet exact et légende complète.]
+
 **Conclusion**
 
 [100 à 150 mots rappelant les régions, la période, les principaux enjeux et les points à surveiller, sans introduire d’information nouvelle.]
+
+[IMAGE 8 — Si un huitième visuel est disponible : nom complet exact et légende complète.]
 
 **En résumé**
 
 [Un seul paragraphe de 80 à 120 mots permettant de comprendre rapidement l’événement.]
 
+[IMAGE 9 — Si un neuvième visuel est disponible : nom complet exact et légende complète.]
+
 *Pour suivre les prochaines évolutions et disposer des dernières modélisations réactualisées, consultez régulièrement nos bulletins et analyses sur Météo-Climat Pro.*
+
+[IMAGE 10 — Si un dixième visuel est disponible : nom complet exact et légende complète.]
 
 **Sources :** [Mentionner uniquement les modèles réellement exploités et les documents fournis, sans nom de média externe. Ne pas inventer d’observations ou d’Observatoire.] Analyse : Météo-Climat Pro.
 
@@ -986,8 +1000,46 @@ export function buildWordForWordArticleHtml(
   let i = bodyStartIndex;
   let hasRenderedChapeau = false;
   const usedImageRefs = new Set<number>();
-  let hasRenderedComplementary = false;
 
+  // Les cartes non citées par l'article sont réparties uniformément sur tout
+  // le corps EN FIN de construction (voir la boucle dédiée plus bas) : un seul
+  // point de décision évite les cartes orphelines et les doublons.
+
+  /** File d'attente des cartes restant à placer, dans l'ordre de référence. */
+  function buildPendingQueue(): number[] {
+    return Object.keys(imagesByRef)
+      .map(Number)
+      .filter(n => imagesByRef[n]?.url && !usedImageRefs.has(n))
+      .sort((a, b) => a - b);
+  }
+
+  /** Rend UNE carte (figure + légende + carte voix off). Idempotent. */
+  function renderSingleMap(refNum: number): string {
+    const imgObj = imagesByRef[refNum];
+    if (!imgObj?.url) return "";
+    // Garde anti-doublon : une même carte ne peut être rendue deux fois,
+    // même si elle est réclamée par deux chemins du parseur.
+    if (usedImageRefs.has(refNum)) return "";
+    usedImageRefs.add(refNum);
+    const voiceInfo = getVoiceoverForImage(refNum, imgObj);
+    const voiceCardHtml = renderVoiceoverCard(voiceInfo);
+    const caption = generateSmartCaption(imgObj.name, refNum);
+
+    return `
+  <div style="margin: 30px 0; text-align: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px;">
+    <img src="${imgObj.url}" alt="${caption.replace(/"/g, "&quot;")}" onerror="this.style.display='none'" style="width: 100%; max-width: 900px; height: auto; border-radius: 8px; display: block; margin: 0 auto;" />
+    <p style="font-size: 13.5px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; font-style: italic;">
+      <strong style="background: rgba(56, 189, 248, 0.2); color: #ffffff; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11.5px; margin-right: 6px;">FIGURE ${refNum}</strong> ${caption}
+    </p>${voiceCardHtml}
+  </div>`;
+  }
+
+  /**
+   * LEGACY (désactivé) : regroupait toutes les cartes non citées dans un bloc
+   * « MODÉLISATIONS CARTOGRAPHIQUES » en fin d'article, ce qui concentrait
+   * jusqu'à 6 cartes sur 10 après 68 % du texte. Conservé pour référence.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function renderComplementaryMaps(): string {
     const allProvidedRefs = Object.keys(imagesByRef)
       .map(Number)
@@ -1035,6 +1087,10 @@ export function buildWordForWordArticleHtml(
       i++;
       continue;
     }
+
+    // Les cartes non citées sont réparties après coup sur le document complet
+    // (voir la boucle finale) : on n'intercale rien ici pour éviter que les
+    // dernières cartes ne s'agglutinent dans les sections de fin.
 
     // 1. Détection universelle des balises d'insertion d'image
     let isImageTag = false;
@@ -1103,6 +1159,32 @@ export function buildWordForWordArticleHtml(
         matchedObj = imagesByRef[imgNum];
       }
 
+      // Anti-doublon : si l'image résolue est déjà affichée, on prend la
+      // première carte encore libre au lieu de la répéter. Auparavant, le
+      // fallback ci-dessous réaffichait la même carte sous plusieurs numéros.
+      const findRefByUrl = (url: string): number | null => {
+        for (const [refStr, info] of Object.entries(imagesByRef)) {
+          if (info.url === url) return Number(refStr);
+        }
+        return null;
+      };
+      if (matchedObj?.url) {
+        const refOfMatch = findRefByUrl(matchedObj.url);
+        if (refOfMatch !== null && usedImageRefs.has(refOfMatch)) {
+          const freeRef = Object.keys(imagesByRef)
+            .map(Number)
+            .sort((a, b) => a - b)
+            .find(n => imagesByRef[n]?.url && !usedImageRefs.has(n));
+          if (freeRef !== undefined) {
+            matchedObj = imagesByRef[freeRef];
+          } else {
+            // Toutes les cartes sont déjà affichées : on saute le doublon.
+            i++;
+            continue;
+          }
+        }
+      }
+
       if (!matchedObj || !matchedObj.url) {
         const allImgs = Object.values(imagesByRef).filter(img => img.url);
         if (allImgs.length > 0) {
@@ -1111,6 +1193,11 @@ export function buildWordForWordArticleHtml(
       }
 
       usedImageRefs.add(imgNum);
+      // Le fallback ci-dessus peut réutiliser une carte déjà affichée :
+      // on l'enregistre aussi pour que la file de répartition ne la repose pas.
+      for (const [refStr, info] of Object.entries(imagesByRef)) {
+        if (matchedObj && info.url === matchedObj.url) usedImageRefs.add(Number(refStr));
+      }
 
       if (!caption) {
         caption = matchedObj ? `Modélisation météorologique Météo-Climat Pro (${matchedObj.name.replace(/\.[^.]+$/, "")})` : `Carte météorologique — Figure ${imgNum}`;
@@ -1379,11 +1466,6 @@ export function buildWordForWordArticleHtml(
 
     // 14. Section "Conclusion"
     if (/^(?:\*\*)?(?:📌\s*)?Conclusion\b/i.test(line)) {
-      if (!hasRenderedComplementary) {
-        const compHtml = renderComplementaryMaps();
-        if (compHtml) htmlParts.push(compHtml);
-        hasRenderedComplementary = true;
-      }
       htmlParts.push(
         `<h3 style="color: #ffffff; font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin: 38px 0 14px 0; border-bottom: 2px solid #64748b; padding-bottom: 8px;">📌 CONCLUSION</h3>`
       );
@@ -1403,11 +1485,6 @@ export function buildWordForWordArticleHtml(
 
     // 16. En résumé en 30 secondes
     if (/^(?:\*\*)?(?:⏱️\s*)?En résumé/i.test(line) || /^En résumé\s*$/i.test(line)) {
-      if (!hasRenderedComplementary) {
-        const compHtml = renderComplementaryMaps();
-        if (compHtml) htmlParts.push(compHtml);
-        hasRenderedComplementary = true;
-      }
       const inlineRest = line.replace(/^\*\*(?:⏱️\s*)?En résumé[^*]*\*\*\s*:?\s*/i, "").trim();
       const summaryParas: string[] = [];
       if (inlineRest && inlineRest !== line) summaryParas.push(inlineRest);
@@ -1488,11 +1565,35 @@ export function buildWordForWordArticleHtml(
     i++;
   }
 
-  // Garantie que 100% des images fournies sont incluses (même si 10 images)
-  if (!hasRenderedComplementary) {
-    const compHtml = renderComplementaryMaps();
-    if (compHtml) htmlParts.push(compHtml);
-    hasRenderedComplementary = true;
+  // Garantie que 100% des images fournies sont incluses.
+  //
+  // Les cartes non citées par l'article sont désormais RÉPARTIES uniformément
+  // sur l'ensemble du corps, et non plus empilées dans un bloc unique en fin
+  // d'article (constat initial : 6 cartes sur 10 regroupées après 68 % du texte).
+  // On calcule les positions sur le document complet pour garantir un espacement
+  // régulier, alors qu'un tel intercalage pendant le parcours laissait les
+  // dernières cartes s'agglutiner.
+  {
+    const stillPending = buildPendingQueue();
+    if (stillPending.length > 0) {
+      const n = htmlParts.length;
+      // Positions cibles : du premier tiers jusqu'à 90 % du document.
+      const targets = stillPending.map((_, idx) => {
+        const total = stillPending.length + 1;
+        return Math.round((0.30 + (0.60 * idx) / Math.max(1, total - 1)) * n);
+      });
+
+      // Insertions du plus à droite au plus à gauche pour préserver les index.
+      const ordered = stillPending
+        .map((refNum, idx) => ({ refNum, slot: targets[idx] }))
+        .sort((a, b) => b.slot - a.slot);
+
+      for (const { refNum, slot } of ordered) {
+        const html = renderSingleMap(refNum);
+        if (!html) continue;
+        htmlParts.splice(Math.min(Math.max(0, slot), htmlParts.length), 0, html);
+      }
+    }
   }
 
   htmlParts.push(`</div>`);
