@@ -218,7 +218,7 @@ Tu es journaliste météo-climat senior, rédacteur SEO, vulgarisateur scientifi
 À partir du texte d’actualité et des images ou GIF fournis, produis en une seule réponse :
 
 1. **Un article web complet**, selon la structure ci-dessous.
-2. **Un script vidéo en cinq scènes**, adapté aux formats vertical 9:16 et paysage 16:9.
+2. **Un script vidéo en {{SCENE_COUNT}} scènes**, adapté aux formats vertical 9:16 et paysage 16:9.
 
 Les deux livrables doivent être prêts à copier-coller dans notre studio.
 
@@ -427,9 +427,9 @@ HASHTAGS : [#meteo #previsions #[Phénomène] #France #MeteoClimatPro — 5 à 8
 
 ---
 
-# LIVRABLE 2 — SCRIPT VIDÉO EN CINQ SCÈNES
+# LIVRABLE 2 — SCRIPT VIDÉO EN {{SCENE_COUNT}} SCÈNES
 
-Produis immédiatement les cinq scènes après l’article.
+Produis immédiatement les {{SCENE_COUNT}} scènes après l’article.
 
 ## CALIBRAGE
 
@@ -441,7 +441,7 @@ Produis immédiatement les cinq scènes après l’article.
 - Écrire tous les nombres en lettres dans les voix off.
 - Privilégier des phrases courtes, naturelles à l’oral.
 - Ne pas lire les noms de modèles, les runs ou les échéances techniques sauf nécessité éditoriale.
-- Terminer la scène 5 par : **« et restez connectés avec METEO CLIMAT PRO. »**
+- Terminer la scène {{LAST_SCENE}} (la dernière) par : **« et restez connectés avec METEO CLIMAT PRO. »**
 
 {{CALIBRAGE_GIF}}
 
@@ -459,55 +459,7 @@ La cohérence avec les images prime sur cette progression. N’impose pas un th�
 
 ## FORMAT DE SORTIE STRICT
 
-SCÈNE 1
-- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
-- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
-- Badge : [2 à 3 mots en majuscules]
-- Titre : [Majuscules, 32 caractères maximum]
-- Sous-titre : [Court, en majuscules]
-- Localisation : [Zone en majuscules]
-- Bandeau Infos Météo : [Phrase courte, cohérente avec le visuel ; chiffres uniquement s’ils sont justifiés]
-- Voix off Charon : [Accroche de 8 à 14 mots]
-
-SCÈNE 2
-- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
-- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
-- Badge : [Adapté au contenu réel]
-- Titre : [Majuscules, 32 caractères maximum]
-- Sous-titre : [Court, en majuscules]
-- Localisation : [Zone en majuscules]
-- Bandeau Infos Météo : [Phrase courte et cohérente avec le visuel]
-- Voix off Charon : [Commentaire correspondant précisément au visuel]
-
-SCÈNE 3
-- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile ; si plusieurs visuels, préciser leur ordre]
-- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
-- Badge : [Adapté au contenu réel]
-- Titre : [Majuscules, 32 caractères maximum]
-- Sous-titre : [Court, en majuscules]
-- Localisation : [Zone en majuscules]
-- Bandeau Infos Météo : [Phrase courte et cohérente avec le visuel]
-- Voix off Charon : [Chronologie représentée ou commentaire limité à l’échéance affichée]
-
-SCÈNE 4
-- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
-- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
-- Badge : [Adapté au contenu réel]
-- Titre : [Majuscules, 32 caractères maximum]
-- Sous-titre : [Court, en majuscules]
-- Localisation : [Zone en majuscules]
-- Bandeau Infos Météo : [Valeurs visibles et période correspondante, si disponibles]
-- Voix off Charon : [Valeurs lisibles sur le visuel et conséquences possibles, clairement distinguées]
-
-SCÈNE 5
-- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
-- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
-- Badge : [Adapté au contenu réel]
-- Titre : [Majuscules, 32 caractères maximum]
-- Sous-titre : [Court, en majuscules]
-- Localisation : [Zone en majuscules]
-- Bandeau Infos Météo : [Phrase courte et cohérente avec le visuel]
-- Voix off Charon : [Conclusion adaptée au visuel, terminée par « et restez connectés avec METEO CLIMAT PRO. »]
+{{SCENES_BLOCK}}
 
 ## VÉRIFICATION FINALE AVANT LIVRAISON
 
@@ -521,7 +473,7 @@ Effectue ces vérifications sans afficher de rapport :
 5. Aucun cumul n’est présenté comme une intensité horaire.
 6. Aucun impact possible n’est présenté comme un dommage constaté.
 7. Les titres, sous-titres et bandeaux respectent les mêmes règles que les voix off.
-8. Les cinq voix off totalisent 165 à 175 mots et forment un commentaire continu.
+8. Les {{SCENE_COUNT}} voix off totalisent 165 à 175 mots et forment un commentaire continu.
 9. Les titres vidéo ne dépassent pas 32 caractères.
 10. Aucun champ entre crochets ne reste dans le résultat.
 11. Le bloc TITRE PARTAGE / PARAGRAPHE PARTAGE / HASHTAGS est présent à la fin de l’article, dans cet ordre.
@@ -551,25 +503,74 @@ Si aucun texte n’est fourni, construis l’angle éditorial à partir des seul
  * le studio, ni aux animations fournies.
  */
 export function buildMasterPrompt(calibration?: Partial<PromptCalibration>): string {
+  const sceneCount = calibration?.sceneCount ?? 5;
   const budget = buildPromptBudget({
     targetDuration: calibration?.targetDuration ?? 60,
-    sceneCount: calibration?.sceneCount ?? 5,
+    sceneCount,
     animationSeconds: calibration?.animationSeconds ?? 0,
     animationCount: calibration?.animationCount ?? 0,
   });
 
+  // FORMAT DE SORTIE : le modèle détaille chaque bloc SCÈNE 1..N.
+  // Les blocs étaient figés de 1 à 5 : avec 10 visuels, l'IA ne savait pas
+  // qu'elle devait produire 10 scènes, et avec 3 visuels elle en inventait 5.
+  const sceneBlockTemplate = (n: number, total: number) => {
+    const isFirst = n === 1;
+    const isLast = n === total;
+    const voice = isFirst
+      ? "[Accroche immédiate, 8 à 14 mots, immédiatement compréhensible]"
+      : isLast
+        ? "[Conclusion adaptée au visuel, terminée par « et restez connectés avec METEO CLIMAT PRO. »]"
+        : n === 2
+          ? "[Commentaire correspondant précisément au visuel]"
+          : n === 3
+            ? "[Chronologie représentée ou commentaire limité à l’échéance affichée]"
+            : n === 4
+              ? "[Valeurs lisibles sur le visuel et conséquences possibles, clairement distinguées]"
+              : `[Commentaire correspondant précisément au visuel n°${n}]`;
+
+    const imageLine = n === 3
+      ? "- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile ; si plusieurs visuels, préciser leur ordre]"
+      : "- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]";
+
+    const badgeHint = isFirst ? "2 à 3 mots en majuscules" : "Adapté au contenu réel";
+    const tickerHint = isFirst
+      ? "Phrase courte, cohérente avec le visuel ; chiffres uniquement s’ils sont justifiés"
+      : n === 4
+        ? "Valeurs visibles et période correspondante, si disponibles"
+        : "Phrase courte et cohérente avec le visuel";
+
+    return `SCÈNE ${n}
+${imageLine}
+- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
+- Badge : [${badgeHint}]
+- Titre : [Majuscules, 32 caractères maximum]
+- Sous-titre : [Court, en majuscules]
+- Localisation : [Zone en majuscules]
+- Bandeau Infos Météo : [${tickerHint}]
+- Voix off Charon : ${voice}`;
+  };
+
+  const scenesBlock = Array.from({ length: sceneCount }, (_, i) =>
+    sceneBlockTemplate(i + 1, sceneCount)
+  ).join("\n\n");
+
   return MASTER_PROMPT_ARTICLE_AND_VIDEO
+    .replace("{{SCENES_BLOCK}}", scenesBlock)
+    // Nombre de scènes : remplacé partout où le prompt peut le mentionner
+    // (titre, intro, consignes, vérification finale).
+    .replace(/\{\{SCENE_COUNT\}\}/g, String(sceneCount))
+    .replace(/\{\{LAST_SCENE\}\}/g, String(sceneCount))
+    .replace("{{SCENES_OVERFLOW}}", "")
     .replace("{{CALIBRAGE_BUDGET}}", budget.calibrageBlock)
     .replace("{{CALIBRAGE_GIF}}", budget.gifBlock)
     .replace(
-      /8\. Les cinq voix off totalisent 165 à 175 mots et forment un commentaire continu\./,
-      `8. Les voix off totalisent ${budget.minWords} à ${budget.maxWords} mots et forment un commentaire continu.`
+      /8\. Les (?:cinq|\d+|\{\{SCENE_COUNT\}\}) voix off totalisent[^\n]*/,
+      `8. Les ${sceneCount} voix off totalisent ${budget.minWords} à ${budget.maxWords} mots et forment un commentaire continu.`
     )
-    .replace(/8\. Les cinq voix off totalisent[^\n]*/,
-      `8. Les voix off totalisent ${budget.minWords} à ${budget.maxWords} mots et forment un commentaire continu.`)
     .replace(
-      /# PROMPT MAÎTRE — ARTICLE WEB COMPLET \+ VIDÉO MÉTÉO EN 5 SCÈNES/,
-      `# PROMPT MAÎTRE — ARTICLE WEB COMPLET + VIDÉO MÉTÉO EN ${calibration?.sceneCount ?? 5} SCÈNES`
+      /# PROMPT MAÎTRE — ARTICLE WEB COMPLET \+ VIDÉO MÉTÉO EN (?:5|\{\{SCENE_COUNT\}\}) SCÈNES/,
+      `# PROMPT MAÎTRE — ARTICLE WEB COMPLET + VIDÉO MÉTÉO EN ${sceneCount} SCÈNES`
     );
 }
 

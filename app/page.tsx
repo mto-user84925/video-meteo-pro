@@ -692,7 +692,7 @@ export default function StudioMeteoPage() {
     }, 2000);
 
     try {
-      addArticleLog("⏳ Rédaction journalistique en cours (titre SEO, chapeau, corps 500 mots, 5 scènes calibrées)...", "ia");
+      addArticleLog(`⏳ Rédaction journalistique en cours (titre SEO, chapeau, corps 500 mots, ${scenes.length} scènes calibrées)...`, "ia");
       const animForPrompt = estimateAnimationSeconds();
       const res = await fetch("/api/generate-article", {
         method: "POST",
@@ -973,7 +973,7 @@ export default function StudioMeteoPage() {
           );
         }
       } else if (art) {
-        // Auto-création des 5 scènes broadcast si ChatGPT s'est arrêté à la fin de l'article
+        // Auto-création des scènes broadcast si ChatGPT s'est arrêté à la fin de l'article
         const usedUrls = new Set<string>();
         const autoScenes: Scene[] = [
           {
@@ -1050,7 +1050,7 @@ export default function StudioMeteoPage() {
           };
         });
         setScenes(autoScenes);
-        addArticleLog(`🎬 5 scènes vidéo adaptées automatiquement à partir de l'article pour votre régie vidéo.`, "success");
+        addArticleLog(`🎬 ${autoScenes.length} scènes vidéo adaptées automatiquement à partir de l'article pour votre régie vidéo.`, "success");
       }
 
       setArticleProgressPercent(55);
@@ -1389,9 +1389,9 @@ export default function StudioMeteoPage() {
           setArticleProgressPercent(100);
           setArticleActionStatus('success');
         }
-        addArticleLog("🎉 Article web structuré mot pour mot + 5 scènes vidéo adaptées pour la régie !", "success");
+        addArticleLog(`🎉 Article web structuré mot pour mot + ${scenes.length} scènes vidéo adaptées pour la régie !`, "success");
         addArticleLog("👉 Cliquez sur '🚀 Charger & Publier DIRECTEMENT sur les 3 sites' pour mettre en ligne.", "publish");
-        const msg = `✅ L'article web complet a été structuré mot pour mot dans la présentation « ${activeTheme.badge} » et 5 scènes vidéo ont été préparées !`;
+        const msg = `✅ L'article web complet a été structuré mot pour mot dans la présentation « ${activeTheme.badge} » et ${scenes.length} scènes vidéo ont été préparées !`;
         setImportSuccessMessage(msg);
         notify(msg, "success");
         return art;
@@ -1595,7 +1595,7 @@ export default function StudioMeteoPage() {
   const handleGenerateScript = async () => {
     // Si un script est déjà présent dans la boîte texte, le resynchroniser immédiatement
     if (manualPromptText && (manualPromptText.includes("SCÈNE") || manualPromptText.includes("Voix off") || manualPromptText.includes("LIVRABLE 2"))) {
-      addArticleLog("🎬 Synchronisation instantanée des 5 scènes à partir de votre script ChatGPT / DeepSeek...", "info");
+      addArticleLog(`🎬 Synchronisation instantanée des scènes à partir de votre script ChatGPT / DeepSeek (${scenes.length} scènes détectées)...`, "info");
       await handleParseManualPrompt(manualPromptText);
       notify("✨ Scènes synchronisées depuis votre script !", "success");
       return;
