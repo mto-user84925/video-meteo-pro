@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 export const maxDuration = 60;
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://ubdevaemtwbzxksjlhjg.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
+// Écriture Storage réservée au service_role : depuis le durcissement RLS
+// (docs/supabase-secure-writes.sql), la clé publishable ne peut plus écrire.
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
 const GITHUB_PAT = process.env.GITHUB_PAT || process.env.GH_TOKEN || "";
 const GITHUB_REPO = process.env.GITHUB_REPO || "mto-user84925/video-meteo-pro";
 const WORKFLOW_FILE = process.env.RENDER_WORKFLOW_FILE || "render.yml";

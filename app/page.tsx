@@ -709,6 +709,24 @@ export default function StudioMeteoPage() {
   };
 
   // UPLOAD COUVERTURE 16:9
+  /**
+   * Téléverse un fichier via la route serveur /api/upload-scene.
+   * L'écriture directe depuis le navigateur est fermée : seuls la clé
+   * service_role (côté serveur) et le studio peuvent désormais écrire.
+   */
+  const uploadSceneFile = async (file: File, remotePath: string): Promise<string> => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("path", remotePath);
+
+    const res = await fetch("/api/upload-scene", { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || `Téléversement refusé (HTTP ${res.status})`);
+    }
+    return data.url as string;
+  };
+
   const handleCoverUpload = async (file: File) => {
     const sId = sessionId || `session_${Date.now()}`;
     if (!sessionId) setSessionId(sId);
@@ -717,24 +735,15 @@ export default function StudioMeteoPage() {
     try {
       const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
       const remotePath = `blog/${Date.now()}_couverture_${safeName}`;
-      const uploadUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/blog-images/${remotePath}`;
-      await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          apikey: "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
-          Authorization: "Bearer sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
-          "Content-Type": file.type || "application/octet-stream"
-        },
-        body: file
-      });
-      const pubUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/${remotePath}`;
+      const pubUrl = await uploadSceneFile(file, remotePath);
       setCoverImageUrl(pubUrl);
       setCoverImageName(file.name);
       addArticleLog(`✓ Photo de couverture enregistrée sur Supabase Storage.`, "success");
       notify("Photo de couverture 16:9 enregistrée !", "success");
-    } catch {
-      addArticleLog(`❌ Erreur lors de l'envoi de la photo de couverture.`, "error");
-      notify("Erreur lors de l'envoi de la photo de couverture.", "error");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erreur lors de l'envoi de la photo de couverture.";
+      addArticleLog(`❌ ${msg}`, "error");
+      notify(msg, "error");
     } finally {
       setUploadingCover(false);
     }
@@ -1542,20 +1551,9 @@ export default function StudioMeteoPage() {
 
     const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
     const remotePath = `renders/${sId}/scene_${index + 1}_${Date.now()}_${safeName}`;
-    const uploadUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/blog-images/${remotePath}`;
 
     try {
-      await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          "apikey": "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
-          "Authorization": "Bearer sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
-          "Content-Type": file.type || "application/octet-stream"
-        },
-        body: file
-      });
-
-      const publicUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/${remotePath}`;
+      const publicUrl = await uploadSceneFile(file, remotePath);
       const nextScenes = scenes.map((sc, i) => {
         if (i === index) {
           return { ...sc, file_url: publicUrl, file_name: file.name };
@@ -1564,8 +1562,8 @@ export default function StudioMeteoPage() {
       });
       setScenes(nextScenes);
       notify(`Carte pour la scène ${index + 1} téléversée !`, "success");
-    } catch {
-      notify("Erreur d'upload vers Supabase.", "error");
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Erreur d'upload vers Supabase.", "error");
     }
   };
 
@@ -1583,20 +1581,8 @@ export default function StudioMeteoPage() {
         files.map(async (file, idx) => {
           const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
           const remotePath = `renders/${sId}/batch_${idx + 1}_${Date.now()}_${safeName}`;
-          const uploadUrl = `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/blog-images/${remotePath}`;
-          await fetch(uploadUrl, {
-            method: "POST",
-            headers: {
-              "apikey": "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
-              "Authorization": "Bearer sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP",
-              "Content-Type": file.type || "application/octet-stream"
-            },
-            body: file
-          });
-          return {
-            url: `https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/${remotePath}`,
-            name: file.name
-          };
+          const url = await uploadSceneFile(file, remotePath);
+          return { url, name: file.name };
         })
       );
 

@@ -4,14 +4,9 @@ export const maxDuration = 60;
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://ubdevaemtwbzxksjlhjg.supabase.co";
 // La clé d'écriture vit côté serveur uniquement (jamais dans le bundle client).
-// La clé `sb_publishable_` reste le repli tant que SUPABASE_SERVICE_ROLE_KEY
-// n'est pas configurée, mais elle ne pourra écrire que si les policies RLS
-// autorisent l'insertion anonyme.
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
+// Depuis le durcissement des policies RLS (docs/supabase-secure-writes.sql),
+// seule la clé service_role peut insérer ou modifier un article.
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
 
 interface UpsertResult {
   ok: boolean;
@@ -164,6 +159,17 @@ export async function POST(req: NextRequest) {
 
     if (!title || !content_dark) {
       return NextResponse.json({ error: "Titre et contenu requis." }, { status: 400 });
+    }
+
+    if (!SUPABASE_KEY) {
+      return NextResponse.json(
+        {
+          error:
+            "Clé d'écriture Supabase absente côté serveur : la publication est désactivée.",
+          hint: "Ajoutez SUPABASE_SERVICE_ROLE_KEY dans les variables d'environnement Vercel.",
+        },
+        { status: 503 }
+      );
     }
 
     // Slug stable : si le client fournit un slug explicite (édition d'un article

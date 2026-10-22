@@ -28,7 +28,13 @@ MUSIC_PATH = os.path.join(ASSETS_DIR, "music", "bg_music.ogg")
 BADGE_MP4 = os.path.join(ASSETS_DIR, "badges", "badge_blinking.mp4")
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://ubdevaemtwbzxksjlhjg.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", os.environ.get("SUPABASE_ANON_KEY", "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP"))
+# Écriture Storage réservée au service_role : la clé publishable n'a plus le
+# droit d'insérer depuis le durcissement des policies RLS (docs/supabase-secure-writes.sql).
+SUPABASE_KEY = (
+    os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    or os.environ.get("SUPABASE_KEY")
+    or os.environ.get("SUPABASE_ANON_KEY", "")
+)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 def get_font(name_pref, size):

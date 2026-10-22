@@ -27,6 +27,8 @@ jobs:
     env:
       SESSION_ID: ${{ github.event.inputs.session_id || inputs.session_id }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://ubdevaemtwbzxksjlhjg.supabase.co' }}
+      # Écriture Storage : service_role obligatoire depuis le durcissement RLS.
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
     steps:
       - name: Checkout repository
