@@ -10,6 +10,8 @@ const BUCKET = "blog-images";
 /** 25 Mo : une carte AROME HD 4K pèse 5 à 8 Mo, on garde une marge confortable. */
 const MAX_BYTES = 25 * 1024 * 1024;
 
+/** Formats autorisés (documentaire : la validation réelle se fait par signature). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ALLOWED_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -124,17 +126,18 @@ export async function POST(req: NextRequest) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
 
-  // Type retenu : on se fie d'abord au CONTENU (signature binaire), puis au
-  // content-type déclaré normalisé. Un fichier valide n'est plus rejeté à
-  // cause d'un en-tête exotique comme « image/jpeg; charset=binary ».
+  // Type retenu : on se fie au CONTENU (signature binaire). Si la signature
+  // n'est pas reconnue, on ne se rabat JAMAIS sur le content-type déclaré :
+  // sinon un fichier texte renommé « .png » avec un type « image/png »
+  // passerait la validation. Le content-type ne sert qu'à produire un message
+  // d'erreur plus explicite.
   const declared = normalizeMime(file.type);
-  const sniffed = sniffImageType(bytes);
-  const type = sniffed || (ALLOWED_TYPES.has(declared) ? declared : "");
+  const type = sniffImageType(bytes);
 
   if (!type) {
     return NextResponse.json(
       {
-        error: `Format non reconnu pour « ${file.name} » (type déclaré : ${declared || "aucun"}). Formats acceptés : PNG, JPEG, WebP, GIF.`,
+        error: `Le contenu de « ${file.name} » n'est pas une image valide (type déclaré : ${declared || "aucun"}). Formats acceptés : PNG, JPEG, WebP, GIF.`,
       },
       { status: 415 }
     );
