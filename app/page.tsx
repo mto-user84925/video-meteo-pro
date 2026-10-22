@@ -740,14 +740,54 @@ export default function StudioMeteoPage() {
    * Téléverse un fichier via la route serveur /api/upload-scene.
    * L'écriture directe depuis le navigateur est fermée : seuls la clé
    * service_role (côté serveur) et le studio peuvent désormais écrire.
+   *
+   * Au-delà de PROXY_LIMIT, on passe par une URL signée : les fonctions Vercel
+   * (plan Hobby) refusent un corps > ~4 Mo, ce qui faisait échouer les cartes
+   * AROME HD et les GIF lourds par un HTTP 413 avant même notre code.
    */
+  const PROXY_LIMIT = 3 * 1024 * 1024; // 3 Mo : marge sous la limite Vercel
+
+  const uploadViaSignedUrl = async (file: File, remotePath: string): Promise<string> => {
+    const signRes = await fetch("/api/upload-sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: remotePath })
+    });
+    const sign = await signRes.json().catch(() => ({}));
+    if (!signRes.ok) {
+      throw new Error(sign?.error || `Signature refusée (HTTP ${signRes.status})`);
+    }
+
+    // Envoi direct navigateur -> Supabase : aucun octet ne traverse Vercel.
+    const putRes = await fetch(sign.upload_url, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file
+    });
+    if (!putRes.ok) {
+      const detail = await putRes.text().catch(() => "");
+      throw new Error(`Téléversement direct refusé (HTTP ${putRes.status}) ${detail.slice(0, 120)}`);
+    }
+    return sign.public_url as string;
+  };
+
   const uploadSceneFile = async (file: File, remotePath: string): Promise<string> => {
+    if (file.size > PROXY_LIMIT) {
+      return uploadViaSignedUrl(file, remotePath);
+    }
+
     const form = new FormData();
     form.append("file", file);
     form.append("path", remotePath);
 
     const res = await fetch("/api/upload-scene", { method: "POST", body: form });
     const data = await res.json().catch(() => ({}));
+
+    // Repli automatique : si Vercel rejette le corps (413) malgré la marge,
+    // on bascule sur l'URL signée plutôt que d'échouer.
+    if (res.status === 413) {
+      return uploadViaSignedUrl(file, remotePath);
+    }
     if (!res.ok) {
       throw new Error(data?.error || `Téléversement refusé (HTTP ${res.status})`);
     }

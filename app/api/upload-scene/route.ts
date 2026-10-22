@@ -7,8 +7,14 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 const BUCKET = "blog-images";
 
-/** 25 Mo : une carte AROME HD 4K pèse 5 à 8 Mo, on garde une marge confortable. */
-const MAX_BYTES = 25 * 1024 * 1024;
+/**
+ * Limite volontairement basse : les fonctions Vercel (plan Hobby) rejettent
+ * un corps > ~4 Mo avec un HTTP 413 AVANT d'atteindre ce code. Le studio
+ * route donc les fichiers de plus de 3 Mo vers /api/upload-sign (envoi direct
+ * navigateur -> Supabase). Cette limite n'est qu'un garde-fou de dernier
+ * recours pour les appels directs à cette route.
+ */
+const MAX_BYTES = 4 * 1024 * 1024;
 
 /** Formats autorisés (documentaire : la validation réelle se fait par signature). */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -119,7 +125,7 @@ export async function POST(req: NextRequest) {
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json(
-      { error: `Fichier trop volumineux (${Math.round(file.size / 1024 / 1024)} Mo, maximum 25 Mo).` },
+      { error: `Fichier trop volumineux pour le relais serveur (${Math.round(file.size / 1024 / 1024)} Mo). Le studio bascule automatiquement sur l'envoi direct.` },
       { status: 413 }
     );
   }
