@@ -1665,14 +1665,39 @@ export default function StudioMeteoPage() {
     addArticleLog(`🖼️ Téléversement groupé de ${files.length} carte(s) météo vers Supabase Storage...`, "images");
 
     try {
-      const uploaded = await Promise.all(
+      // Tolérance aux fichiers isolés : un seul refus (format exotique, fichier
+      // corrompu) ne doit plus faire échouer tout le lot. On collecte les
+      // réussites et on signale les échecs individuellement.
+      const results = await Promise.all(
         files.map(async (file, idx) => {
           const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
           const remotePath = `renders/${sId}/batch_${idx + 1}_${Date.now()}_${safeName}`;
-          const url = await uploadSceneFile(file, remotePath);
-          return { url, name: file.name };
+          try {
+            const url = await uploadSceneFile(file, remotePath);
+            return { ok: true as const, url, name: file.name };
+          } catch (err) {
+            return {
+              ok: false as const,
+              name: file.name,
+              error: err instanceof Error ? err.message : String(err),
+            };
+          }
         })
       );
+
+      const uploaded = results.filter((r) => r.ok).map((r) => ({ url: r.url, name: r.name }));
+      const failed = results.filter((r) => !r.ok);
+
+      if (uploaded.length === 0) {
+        const detail = failed.map((f) => `${f.name} : ${f.error}`).join(" • ");
+        throw new Error(detail || "Aucun fichier n'a pu être téléversé.");
+      }
+      if (failed.length > 0) {
+        addArticleLog(
+          `⚠️ ${failed.length} fichier(s) ignoré(s) : ${failed.map((f) => `${f.name} (${f.error})`).join(" • ")}`,
+          "error"
+        );
+      }
 
       const normalize = (s: string) =>
         s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -1765,9 +1790,12 @@ export default function StudioMeteoPage() {
       addArticleLog(`✓ ${uploaded.length} carte(s) météo téléversée(s) et reliée(s) aux scènes et à l'article.`, "success");
       setImportSuccessMessage(`✅ ${uploaded.length} image(s) téléversée(s) et associées intelligemment à l'article et aux scènes !`);
       notify(`✅ ${uploaded.length} image(s) téléversée(s) et synchronisées !`, "success");
-    } catch {
-      addArticleLog("❌ Erreur lors de l'envoi groupé des images.", "error");
-      notify("Erreur lors de l'envoi groupé des images.", "error");
+    } catch (e) {
+      // Le catch masquait l'erreur réelle : on l'expose dans le journal.
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[handleBatchFilesUpload]", e);
+      addArticleLog(`❌ Envoi groupé impossible : ${msg}`, "error");
+      notify(`Envoi des images impossible : ${msg}`, "error");
     } finally {
       setUploadingBatch(false);
     }

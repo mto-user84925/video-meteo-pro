@@ -22,6 +22,36 @@ const ALLOWED_TYPES = new Set([
 const ALLOWED_PREFIX = /^(renders\/[A-Za-z0-9_-]{3,80}\/|blog\/)/;
 
 /**
+ * Devine le type d'image à partir de ses premiers octets (signature binaire).
+ *
+ * Certains exports arrivent avec un content-type inutilisable :
+ * « image/jpeg; charset=binary », « application/octet-stream », chaîne vide…
+ * Un seul fichier refusé faisait échouer tout l'envoi groupé
+ * (« Erreur lors de l'envoi groupé des images »), car le studio envoie les
+ * fichiers en Promise.all.
+ */
+function sniffImageType(bytes: Uint8Array): string | null {
+  if (bytes.length < 12) return null;
+  // PNG
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  // JPEG
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  // GIF
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return "image/gif";
+  // WebP : "RIFF" .... "WEBP"
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) return "image/webp";
+  return null;
+}
+
+/** Normalise un content-type déclaré (« image/jpeg; charset=binary » -> « image/jpeg »). */
+function normalizeMime(raw: string): string {
+  return (raw || "").split(";")[0].trim().toLowerCase();
+}
+
+/**
  * Téléversement de cartes depuis le studio.
  *
  * Raison d'être : les policies Storage autorisaient l'écriture anonyme sur
@@ -92,15 +122,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const type = (file.type || "").toLowerCase();
-  if (!ALLOWED_TYPES.has(type)) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+
+  // Type retenu : on se fie d'abord au CONTENU (signature binaire), puis au
+  // content-type déclaré normalisé. Un fichier valide n'est plus rejeté à
+  // cause d'un en-tête exotique comme « image/jpeg; charset=binary ».
+  const declared = normalizeMime(file.type);
+  const sniffed = sniffImageType(bytes);
+  const type = sniffed || (ALLOWED_TYPES.has(declared) ? declared : "");
+
+  if (!type) {
     return NextResponse.json(
-      { error: `Type de fichier refusé (${type || "inconnu"}). Formats : PNG, JPEG, WebP, GIF.` },
+      {
+        error: `Format non reconnu pour « ${file.name} » (type déclaré : ${declared || "aucun"}). Formats acceptés : PNG, JPEG, WebP, GIF.`,
+      },
       { status: 415 }
     );
   }
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
   const url = `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${safePath}`;
 
   // POST crée, PUT remplace (upsert) lorsque le nom existe déjà.
