@@ -59,10 +59,19 @@ export async function POST(req: NextRequest) {
   }
 
   // Assainissement : pas de `..`, pas de caractères de contrôle, préfixe autorisé.
-  const safePath = rawPath
-    .replace(/\\/g, "/")
-    .split("/")
-    .filter((seg) => seg && seg !== "." && seg !== "..")
+  // Une tentative de traversée (`renders/x/../../evil.png`) est REFUSÉE plutôt que
+  // silencieusement aplatie : on ne veut pas qu'un chemin malveillant ait l'air
+  // d'avoir réussi.
+  const rawSegments = rawPath.replace(/\\/g, "/").split("/");
+  if (rawSegments.some((seg) => seg === ".." || seg === ".")) {
+    return NextResponse.json(
+      { error: "Chemin refusé : les segments '.' et '..' sont interdits." },
+      { status: 403 }
+    );
+  }
+
+  const safePath = rawSegments
+    .filter((seg) => seg.length > 0)
     .join("/")
     .replace(/[^\w./-]/g, "_");
 
