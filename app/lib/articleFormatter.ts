@@ -629,13 +629,26 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
   const defaultTitles = ["RISQUE DE TEMPÊTE", "DÉPRESSIONS ATLANTIQUES", "LE NORD-OUEST EXPOSÉ", "POINTES À PLUS DE 100 KM/H", "SITUATION À SURVEILLER"];
 
   const scenes: ParsedVideoScene[] = [];
-  const sceneRegex = /(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*(\d+)\b[^\n]*\n([\s\S]*?)(?=(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*\d+\b|$)/gi;
-  let scM: RegExpExecArray | null;
+  // Découpe du document en blocs (un par scène). Le titre de scène peut être
+  // collé au paragraphe précédent (ex. « ...fichier.SCÈNE 3 ») : on accepte
+  // la balise en début de ligne OU après une ponctuation forte.
+  const blocks: Array<{ num: number; body: string }> = [];
+  const positions: Array<{ num: number; start: number; tagStart: number }> = [];
+  const headRe = /(?:^|\n|[.!?]\s*)(?:\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*(\d+)\b[^\n]*)/gi;
+  let hm: RegExpExecArray | null;
+  while ((hm = headRe.exec(text)) !== null) {
+    // On ne conserve que la fin de la balise « SCÈNE N … » : le lookbehind de
+    // ponctuation ne fait pas partie du bloc, sinon le titre de la scène
+    // suivante se retrouvait avalé dans la voix off précédente.
+    const tagStart = hm.index + hm[0].indexOf("SC", Math.max(0, hm[0].toUpperCase().indexOf("SC")));
+    positions.push({ num: Number(hm[1]), start: hm.index + hm[0].length, tagStart: tagStart >= 0 ? tagStart : hm.index });
+  }
+  positions.forEach((p, idx) => {
+    const end = idx + 1 < positions.length ? positions[idx + 1].tagStart : text.length;
+    blocks.push({ num: p.num, body: text.slice(p.start, end) });
+  });
 
-  while ((scM = sceneRegex.exec(text)) !== null) {
-    const scNum = Number(scM[1]);
-    const body = scM[2];
-
+  for (const { num: scNum, body } of blocks) {
     let title = "";
     let sub = "";
     let badge = "";
@@ -643,20 +656,52 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
     let ticker = "";
     let script_text = "";
     let fileName = "";
+    // Les lignes de la voix off : après « Voix off Charon : », la suite du
+    // paragraphe appartient à la même voix off, même si elle contient des
+    // deux-points (« ...pour vents violents : le Nord, le Pas-de-Calais »).
+    let inVoiceover = false;
+    const voiceParts: string[] = [];
+
+    /** Vrai si la ligne est une VRAIE clé de champ (« Image à utiliser : ... »). */
+    const KNOWN_KEYS = /^(?:image\s*(?:à|a)?\s*utiliser|images?\b|visuel|fichier|échéance|echeance|durée\s*animation|duree\s*animation|badge|titre|sous-?titre|localisation|lieu|zone|bandeau|ticker|infos\s*m[ée]t[ée]o|voix\s*off|script|charon)/i;
+    // La valeur peut être VIDE (« Voix off Charon : » puis le texte à la ligne
+    // suivante) : c'est précisément le format renvoyé par ChatGPT et il était
+    // ignoré, ce qui faisait perdre la totalité de la voix off.
+    const isFieldLine = (line: string): boolean => {
+      const kv = line.match(/^([^:]{1,40}):\s*(.*)$/);
+      if (!kv) return false;
+      const key = kv[1].trim().replace(/\*\*/g, "");
+      return key.length <= 32 && KNOWN_KEYS.test(key);
+    };
 
     const lines = body.split(/\r?\n/);
     for (const rawLine of lines) {
       const l = rawLine.trim().replace(/^[-*•]\s*/, "");
-      const kv = l.match(/^([^:]+):\s*(.+)$/);
-      if (!kv) continue;
+      if (!l) continue;
+
+      if (!isFieldLine(l)) {
+        // Texte libre : suite de la voix off en cours (paragraphe multi-lignes).
+        if (inVoiceover) voiceParts.push(l);
+        continue;
+      }
+
+      const kv = l.match(/^([^:]{1,40}):\s*(.*)$/)!;
       const k = kv[1].toLowerCase().trim().replace(/\*\*/g, "");
       const v = kv[2].trim().replace(/\*\*/g, "");
 
       if (k.includes("voix off") || k.includes("script") || k === "charon" || k.includes("voix-off")) {
-        script_text = v.replace(/^["«]|["»]$/g, "").trim();
-      } else if (k.includes("bandeau") || k.includes("ticker") || k.includes("infos meteo")) {
+        inVoiceover = true;
+        const first = v.replace(/^["«]|["»]$/g, "").trim();
+        if (first) voiceParts.push(first);
+        continue;
+      }
+
+      // Toute autre clé de champ termine la voix off.
+      inVoiceover = false;
+
+      if (k.includes("bandeau") || k.includes("ticker") || k.includes("infos meteo")) {
         ticker = v;
-      } else if (k.includes("localisation") || k.includes("lieu") || k.includes("zone")) {
+      } else if (k.includes("localisation") || k.includes("lieu") || k === "zone") {
         location_tag = v.toUpperCase();
       } else if (k.startsWith("sous-titre") || k.startsWith("sous titre") || k === "sub") {
         sub = v.toUpperCase();
@@ -665,15 +710,17 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
       } else if (k.includes("badge")) {
         badge = v.toUpperCase();
       } else if (k.includes("image") || k.includes("visuel") || k.includes("fichier")) {
-        // Supporter les noms Mac avec espaces, apostrophes, accents (ex: Capture d’écran 2026-10-18 à 14.30.01.png)
+        // On privilégie « Image à utiliser » sur « Visuel complémentaire ».
+        const isMainImage = k.includes("image") && !k.includes("compl");
         const fnM = v.match(/(?:Image\s*\d+\s*[-—–]\s*)?([^—–\n:]+\.(?:png|jpg|jpeg|gif|webp))/i);
-        if (fnM) {
+        if (fnM && (isMainImage || !fileName)) {
           fileName = fnM[1].trim();
-        } else {
+        } else if (!fnM && !fileName) {
           fileName = v;
         }
       }
     }
+    script_text = voiceParts.join(" ").replace(/\s+/g, " ").trim();
 
     if (!script_text) {
       const voMatch = body.match(/Voix\s+off(?:\s+Charon)?[^:\n]*:\s*(?:[«"]([^»"]+)[»"]|([^\n]+(?:\n(?!(?:Bandeau|Localisation|Sous-titre|Titre|Badge|Image|Dur[ée]e|SC[ÈE]NE|\*\*))[^\n]+)*))/i);
@@ -851,11 +898,25 @@ export function buildWordForWordArticleHtml(
     return `Modélisation cartographique et analyse atmosphérique (${niceName}) — Météo-Climat Pro.`;
   }
 
-  // Extraire la partie article (avant SCÈNE 1 ou entre === DEBUT ARTICLE === et === FIN ARTICLE ===)
+  // Extraire la partie article.
+  //
+  // BUG corrigé : beaucoup de réponses oublient « === DEBUT ARTICLE === » mais
+  // conservent « === FIN ARTICLE === » et placent APRÈS elle le bloc de partage
+  // (TITRE PARTAGE / PARAGRAPHE PARTAGE / HASHTAGS). L'ancienne découpe
+  // s'arrêtait à « SCÈNE 1 », ce qui supprimait ce bloc : les trois champs
+  // ressortaient vides et étaient inutilisables pour Facebook/TikTok.
   let articleBlock = rawText;
-  const explicitMatch = rawText.match(/===\s*DEBUT ARTICLE\s*===([\s\S]*?)(?:===\s*FIN ARTICLE\s*===|(?=(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+1\b)|$)/i);
-  if (explicitMatch && explicitMatch[1]?.trim()) {
-    articleBlock = explicitMatch[1].trim();
+  const fullMatch = rawText.match(/===\s*DEBUT ARTICLE\s*===([\s\S]*?)===\s*FIN ARTICLE\s*===/i);
+  const endOnlyMatch = !fullMatch
+    ? rawText.match(/^([\s\S]*?)===\s*FIN ARTICLE\s*===/i)
+    : null;
+
+  if (fullMatch && fullMatch[1]?.trim()) {
+    articleBlock = fullMatch[1].trim();
+  } else if (endOnlyMatch && endOnlyMatch[1]?.trim()) {
+    // Pas de marqueur de début : tout ce qui précède === FIN ARTICLE === est
+    // l'article (l'en-tête « LIVRABLE 1 » éventuel sera ignoré au parsing).
+    articleBlock = endOnlyMatch[1].trim();
   } else {
     const beforeScene1 = rawText.split(/(?:^|\n)\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s+1\b/i)[0]?.trim();
     if (beforeScene1 && beforeScene1.length > 60) {
@@ -875,8 +936,11 @@ export function buildWordForWordArticleHtml(
   // clair au bas de l'article sur les sites.
   const social = { socialTitle: "", socialDescription: "", hashtags: "" };
   {
+    // Le bloc de partage peut se trouver après « === FIN ARTICLE === »
+    // (cas fréquent des réponses ChatGPT) : on cherche dans TOUT le texte,
+    // pas seulement dans la partie article déjà découpée.
     const grab = (re: RegExp) => {
-      const m = articleBlock.match(re);
+      const m = rawText.match(re) || articleBlock.match(re);
       return m ? m[1].replace(/\*\*/g, "").replace(/^["«]|["»]$/g, "").trim() : "";
     };
     social.socialTitle = grab(/(?:^|\n)\s*(?:\*\*)?TITRE\s+PARTAGE(?:\*\*)?\s*:\s*([^\n]+)/i);

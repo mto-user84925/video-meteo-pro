@@ -49,6 +49,8 @@ import {
 import { resolveSceneCount, describeSceneCount, MAX_SCENES } from "./lib/scenePlan";
 import type { Scene } from "./lib/scenePlanTypes";
 import { completeScenesWithImages } from "./lib/completeScenes";
+import { readTextFile, isSupportedTextFile } from "./lib/readTextFile";
+import { auditSceneImages, summarizeImageAudit } from "./lib/imageAudit";
 
 interface LogEntry {
   id: string;
@@ -640,6 +642,44 @@ export default function StudioMeteoPage() {
     const DEFAULT_GIF_SECONDS = 30;
     return { seconds: gifScenes.length * DEFAULT_GIF_SECONDS, count: gifScenes.length };
   }, [scenes]);
+
+  /**
+   * Import d'un fichier .txt / .md produit par ChatGPT.
+   * Plus fiable qu'un copier-coller (pas de caractères invisibles) et
+   * l'encodage est détecté puis normalisé.
+   *
+   * NOTE : `handleParseManualPrompt` est déclaré plus bas (const, donc non
+   * hissé). On passe par une ref pour éviter une ReferenceError si l'import
+   * est déclenché avant que la déclaration soit évaluée.
+   */
+  const parsePromptRef = useRef<((text: string, options?: { silent?: boolean; imagesOverride?: Array<{ url: string; name: string; ref: number }> }) => Promise<unknown>) | null>(null);
+
+  const handleImportTextFile = async (file: File) => {
+    if (!isSupportedTextFile(file.name)) {
+      notify(`Format non supporté : « ${file.name} ». Utilisez un fichier .txt ou .md.`, "warning");
+      return;
+    }
+    try {
+      addArticleLog(`📂 Lecture du fichier « ${file.name} »...`, "info");
+      const { text, encoding, converted } = await readTextFile(file);
+
+      setManualPromptText(text);
+      autoDetectAndUpdateMetadata(text);
+      addArticleLog(
+        `✅ Fichier lu : ${text.length.toLocaleString("fr-FR")} caractères` +
+          (converted ? ` (converti depuis ${encoding})` : ` (${encoding})`),
+        "success"
+      );
+      if (!parsePromptRef.current) {
+        throw new Error("Le moteur d'analyse n'est pas encore prêt.");
+      }
+      await parsePromptRef.current(text, { silent: false });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Lecture impossible";
+      addArticleLog(`❌ ${msg}`, "error");
+      notify(msg, "error");
+    }
+  };
 
   const handleCopyMasterPrompt = async () => {
     try {
@@ -1306,6 +1346,36 @@ export default function StudioMeteoPage() {
         if (parsedScenes[0]?.title && !art?.title) setTopic(parsedScenes[0].title);
         addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec titre, badge, bandeau et voix off Charon.`, "success");
 
+        // Contrôle de cohérence scènes ↔ cartes : détecte les noms mal recopiés
+        // par l'IA, les cartes oubliées ou utilisées deux fois, et l'ordre.
+        const uploadedList = Object.entries(existingImagesByRef)
+          .filter(([, img]) => img?.url)
+          .map(([ref, img]) => ({ name: img.name, ref: Number(ref) }));
+        const audit = auditSceneImages(
+          parsedScenes.map((s) => ({
+            sceneNumber: s.scene_number,
+            declaredName: s.image_hint || s.file_name || "",
+            matchedName: s.file_name || "",
+          })),
+          uploadedList
+        );
+        if (audit.issues.length === 0) {
+          addArticleLog(summarizeImageAudit(audit, parsedScenes.length), "images");
+        } else {
+          for (const issue of audit.issues) {
+            addArticleLog(
+              `${issue.level === "error" ? "❌" : issue.level === "warning" ? "⚠️" : "ℹ️"} ${issue.message}`,
+              issue.level === "error" ? "error" : "info"
+            );
+          }
+          if (audit.issues.some((i) => i.level === "error")) {
+            notify(
+              `${audit.issues.filter((i) => i.level === "error").length} incohérence(s) détectée(s) entre les scènes et les cartes — voir le journal.`,
+              "warning"
+            );
+          }
+        }
+
         // 1 visuel = 1 scène (règle identique au parcours "Charger & Publier").
         const completion = completeScenesWithImages({
           parsed: parsedScenes,
@@ -1499,6 +1569,11 @@ export default function StudioMeteoPage() {
         setArticleActionRunning(false);
       }
     }
+  };
+
+  // Expose l'analyseur pour l'import de fichier (déclaré plus haut).
+  parsePromptRef.current = async (text, options) => {
+    await handleParseManualPrompt(text, options);
   };
 
   // Auto-parsing réactif : dès que l'utilisateur colle ou tape un prompt complet avec scènes/article
@@ -2309,8 +2384,26 @@ export default function StudioMeteoPage() {
                   }
                 }
               }}
-              className="w-full bg-slate-950/90 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono leading-relaxed"
+              onDragOver={e => {
+                // Glisser-déposer d'un fichier .txt / .md généré par ChatGPT
+                if (e.dataTransfer.types.includes("Files")) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                }
+              }}
+              onDrop={e => {
+                const file = e.dataTransfer.files?.[0];
+                if (!file) return;
+                e.preventDefault();
+                handleImportTextFile(file);
+              }}
+              className="w-full bg-slate-950/90 border border-slate-700 border-dashed rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono leading-relaxed"
             />
+            <p className="text-[10px] text-slate-500 -mt-1 flex items-center gap-1.5">
+              <FileText className="w-3 h-3" />
+              Vous pouvez aussi <strong className="text-slate-400">glisser un fichier .txt ou .md</strong> ici,
+              ou utiliser le bouton « Importer un fichier » ci-dessous.
+            </p>
 
             {/* BARRE D'ACTIONS ÉDITORIALES & PUBLICATION */}
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
@@ -2333,10 +2426,28 @@ export default function StudioMeteoPage() {
                 {uploadingBatch ? "Téléversement..." : "🖼️ Importer cartes (Image 1, 2, 3...)"}
                 <input
                   type="file"
-                  accept="image/*,.gif"
                   multiple
                   className="hidden"
                   onChange={e => handleBatchFilesUpload(e.target.files)}
+                />
+              </label>
+
+              {/* 2 bis. IMPORTER UN FICHIER .txt / .md DE CHATGPT */}
+              <label
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 hover:border-emerald-400 font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer"
+                title="Importer directement le fichier .txt ou .md de la réponse ChatGPT (encodage détecté automatiquement)"
+              >
+                <FileText className="w-4 h-4" />
+                📂 Importer un fichier (.txt / .md)
+                <input
+                  type="file"
+                  accept=".txt,.md,.markdown,text/plain"
+                  className="hidden"
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (f) handleImportTextFile(f);
+                    e.target.value = "";
+                  }}
                 />
               </label>
 
