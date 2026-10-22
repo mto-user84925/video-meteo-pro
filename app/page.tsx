@@ -46,6 +46,9 @@ import {
   sanitizeInlineHtml,
   textToInlineHtml
 } from "./lib/articleEditor";
+import { resolveSceneCount, describeSceneCount, MAX_SCENES } from "./lib/scenePlan";
+import type { Scene } from "./lib/scenePlanTypes";
+import { completeScenesWithImages } from "./lib/completeScenes";
 
 interface LogEntry {
   id: string;
@@ -59,21 +62,6 @@ interface ArticleLogEntry {
   time: string;
   text: string;
   type: 'info' | 'ia' | 'theme' | 'images' | 'publish' | 'success' | 'error';
-}
-
-interface Scene {
-  scene_number: number;
-  badge: string;
-  badge_color: number[];
-  title: string;
-  sub: string;
-  location_tag: string;
-  ticker: string;
-  script_text: string;
-  file_url?: string;
-  file_name?: string;
-  image_ref?: number;
-  image_hint?: string;
 }
 
 interface ToastNotification {
@@ -960,6 +948,30 @@ export default function StudioMeteoPage() {
         });
         setScenes(parsedScenes);
         addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec titre, badge, bandeau et voix off Charon.`, "success");
+
+        // 1 visuel = 1 scène : complète si le script cite moins de scènes que
+        // de cartes fournies, pour qu'aucune carte ne reste invisible.
+        const completion = completeScenesWithImages({
+          parsed: parsedScenes,
+          images: Object.entries(existingImagesByRef)
+            .filter(([, img]) => img?.url)
+            .map(([ref, img]) => ({ url: img.url, name: img.name, ref: Number(ref) })),
+          maxScenes: MAX_SCENES,
+          emptyScenes: createEmptyScenes
+        });
+        if (completion.added > 0) {
+          setScenes(completion.scenes);
+          addArticleLog(
+            `➕ ${completion.added} scène(s) ajoutée(s) pour afficher les cartes non citées par le script (${completion.scenes.length} scènes au total).`,
+            "images"
+          );
+        }
+        if (completion.ignoredImages > 0) {
+          addArticleLog(
+            `⚠️ ${completion.ignoredImages} carte(s) non utilisée(s) : plafond de ${MAX_SCENES} scènes atteint.`,
+            "info"
+          );
+        }
       } else if (art) {
         // Auto-création des 5 scènes broadcast si ChatGPT s'est arrêté à la fin de l'article
         const usedUrls = new Set<string>();
@@ -1254,6 +1266,29 @@ export default function StudioMeteoPage() {
         if (parsedScenes[0]?.title && !art?.title) setTopic(parsedScenes[0].title);
         addArticleLog(`🎬 ${parsedScenes.length} scènes vidéo broadcast synchronisées avec titre, badge, bandeau et voix off Charon.`, "success");
 
+        // 1 visuel = 1 scène (règle identique au parcours "Charger & Publier").
+        const completion = completeScenesWithImages({
+          parsed: parsedScenes,
+          images: Object.entries(existingImagesByRef)
+            .filter(([, img]) => img?.url)
+            .map(([ref, img]) => ({ url: img.url, name: img.name, ref: Number(ref) })),
+          maxScenes: MAX_SCENES,
+          emptyScenes: createEmptyScenes
+        });
+        if (completion.added > 0) {
+          setScenes(completion.scenes);
+          addArticleLog(
+            `➕ ${completion.added} scène(s) ajoutée(s) pour afficher les cartes non citées par le script (${completion.scenes.length} scènes au total).`,
+            "images"
+          );
+        }
+        if (completion.ignoredImages > 0) {
+          addArticleLog(
+            `⚠️ ${completion.ignoredImages} carte(s) non utilisée(s) : plafond de ${MAX_SCENES} scènes atteint.`,
+            "info"
+          );
+        }
+
         if (!isSilent) {
           setArticleProgressPercent(100);
           setArticleActionStatus('success');
@@ -1395,7 +1430,21 @@ export default function StudioMeteoPage() {
             setCustomPhenomenon(parsed.phenomenon);
           }
           if (parsedScenes[0]?.title) setTopic(parsedScenes[0].title);
-          const msg = `✅ Les ${parsedScenes.length} scènes JSON ont été remplies automatiquement en 1 clic !`;
+
+          // 1 visuel = 1 scène : complète si le JSON décrit moins de scènes
+          // que de cartes fournies.
+          const completion = completeScenesWithImages({
+            parsed: parsedScenes,
+            images: Object.entries(existingImagesByRef)
+              .filter(([, img]) => img?.url)
+              .map(([ref, img]) => ({ url: img.url, name: img.name, ref: Number(ref) })),
+            maxScenes: MAX_SCENES,
+            emptyScenes: createEmptyScenes
+          });
+          if (completion.added > 0) setScenes(completion.scenes);
+
+          const finalCount = completion.added > 0 ? completion.scenes.length : parsedScenes.length;
+          const msg = `✅ ${finalCount} scènes (1 image = 1 scène) remplies automatiquement en 1 clic !`;
           setImportSuccessMessage(msg);
           notify(msg, "success");
           return null;
@@ -1629,7 +1678,30 @@ export default function StudioMeteoPage() {
         s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
       const usedUrlsInUpload = new Set<string>();
-      const nextScenes = scenes.map((sc, i) => {
+
+      // RÈGLE « 1 visuel = 1 scène » appliquée automatiquement : 10 cartes
+      // fournies produisent 10 scènes, 3 cartes en produisent 3.
+      const MAX_SCENES = resolveSceneCount({ imageCount: uploaded.length, currentCount: scenes.length });
+      const targetCount = MAX_SCENES;
+      const baseScenes: Scene[] = [...scenes];
+      while (baseScenes.length < targetCount) {
+        const n = baseScenes.length + 1;
+        const preset = BADGE_PRESETS[(n - 1) % BADGE_PRESETS.length];
+        baseScenes.push({
+          scene_number: n,
+          badge: preset.badge,
+          badge_color: [...preset.color],
+          title: "",
+          sub: "",
+          location_tag: "",
+          ticker: "",
+          script_text: "",
+          file_url: "",
+          file_name: ""
+        });
+      }
+
+      const nextScenes = baseScenes.map((sc, i) => {
         let chosen = uploaded[(sc.image_ref ? sc.image_ref - 1 : i) % uploaded.length];
 
         if (sc.image_hint) {
@@ -1676,6 +1748,8 @@ export default function StudioMeteoPage() {
         };
       });
       setScenes(nextScenes);
+
+      addArticleLog(describeSceneCount(uploaded.length, nextScenes.length), "images");
 
       const batchWithRefs = uploaded.map((u, i) => ({ ...u, ref: i + 1 }));
       setBatchUploadedImages(batchWithRefs);

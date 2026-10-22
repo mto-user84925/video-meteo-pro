@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     }
 
     const durationSec = Number(target_duration) || 60;
-    const numScenes = Math.max(2, Math.min(10, Number(scene_count) || 5));
+    const numScenes = Math.max(2, Math.min(12, Number(scene_count) || 5));
 
     // Le prompt est calibré sur la durée, le nombre de scènes ET la durée des
     // GIF animés fournis : sans cela l'IA produisait 165-175 mots fixes, trop
@@ -67,7 +67,7 @@ RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN
         messages: [
           {
             role: "system",
-            content: "Tu es un journaliste météo-climat senior pour METEO CLIMAT PRO. Rédige de façon directe, synthétique et percutante (format article web professionnel de 400 à 600 mots) sans digression ni réflexion interminable, suivi immédiatement du script vidéo en 5 scènes (SCÈNE 1 à SCÈNE 5)."
+            content: `Tu es un journaliste météo-climat senior pour METEO CLIMAT PRO. Rédige de façon directe, synthétique et percutante (format article web professionnel de 400 à 600 mots) sans digression ni réflexion interminable, suivi immédiatement du script vidéo en ${numScenes} scènes (SCÈNE 1 à SCÈNE ${numScenes}). Une image fournie = une scène : ne regroupe jamais deux visuels dans la même scène.`
           },
           {
             role: "user",

@@ -436,7 +436,8 @@ Produis immédiatement les cinq scènes après l’article.
 {{CALIBRAGE_BUDGET}}
 
 - Scène 1 : **8 à 14 mots**, avec une accroche immédiatement compréhensible.
-- Scènes 2 à 5 : répartir le reste pour former un commentaire continu et fluide.
+- Scènes 2 à la dernière : répartir le reste pour former un commentaire continu et fluide.
+- **UNE IMAGE FOURNIE = UNE SCÈNE** : chaque visuel (carte PNG ou GIF) doit avoir sa propre scène avec son propre commentaire. Ne regroupe jamais deux visuels dans la même scène et n'oublie jamais un fichier fourni.
 - Écrire tous les nombres en lettres dans les voix off.
 - Privilégier des phrases courtes, naturelles à l’oral.
 - Ne pas lire les noms de modèles, les runs ou les échéances techniques sauf nécessité éditoriale.

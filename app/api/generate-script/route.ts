@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     }
 
     const durationSec = Number(target_duration) || 60;
-    const numScenes = Math.max(2, Math.min(10, Number(scene_count) || 5));
+    const numScenes = Math.max(2, Math.min(12, Number(scene_count) || 5));
     const totalWordsTarget = Math.round(durationSec * 2.9);
     const wordsPerLaterScene = Math.round((totalWordsTarget - 14) / (numScenes - 1));
 
