@@ -387,6 +387,10 @@ export default function StudioMeteoPage() {
   const [editSlug, setEditSlug] = useState("");
   const [editBlocks, setEditBlocks] = useState<ArticleBlock[]>([]);
   const [editHistory, setEditHistory] = useState<Array<{ title: string; excerpt: string; category: string; author: string; blocks: ArticleBlock[] }>>([]);
+  // Bloc de partage réseaux sociaux (TITRE PARTAGE / PARAGRAPHE PARTAGE / HASHTAGS)
+  const [editSocialTitle, setEditSocialTitle] = useState("");
+  const [editSocialDescription, setEditSocialDescription] = useState("");
+  const [editHashtags, setEditHashtags] = useState("");
 
   /** Charge l'article parsé dans l'éditeur (à chaque nouveau parse / changement de thème). */
   const hydrateEditor = useCallback((article: ParsedArticleOutput) => {
@@ -394,6 +398,9 @@ export default function StudioMeteoPage() {
     setEditExcerpt(article.excerpt || "");
     setEditCategory(article.category || "Actualités Météo");
     setEditSlug("");
+    setEditSocialTitle(article.socialTitle || "");
+    setEditSocialDescription(article.socialDescription || "");
+    setEditHashtags(article.hashtags || "");
     setEditBlocks(buildArticleBlocks(article.htmlDark));
     setEditHistory([]);
   }, []);
@@ -611,6 +618,9 @@ export default function StudioMeteoPage() {
     setEditSlug("");
     setEditBlocks([]);
     setEditHistory([]);
+    setEditSocialTitle("");
+    setEditSocialDescription("");
+    setEditHashtags("");
     setCoverImageUrl("");
     setCoverImageName("");
     setBatchUploadedImages([]);
@@ -2511,6 +2521,63 @@ export default function StudioMeteoPage() {
                           placeholder="meteo-retour-de-la-pluie-1792667167"
                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-emerald-300 focus:outline-none focus:border-amber-400"
                         />
+                      </div>
+
+                      {/* BLOC PARTAGE RÉSEAUX SOCIAUX */}
+                      <div className="md:col-span-2 border-t border-slate-800 pt-3 mt-1 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-sky-400">
+                            📱 Partage réseaux sociaux
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const payload = [editSocialTitle, editSocialDescription, editHashtags].filter(Boolean).join("\n\n");
+                              if (payload) {
+                                navigator.clipboard.writeText(payload);
+                                notify("Bloc de partage copié dans le presse-papier !", "success");
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                            title="Copier titre + paragraphe + hashtags pour les réseaux"
+                          >
+                            <Copy className="w-3 h-3" /> Copier
+                          </button>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                            Titre partage ({editSocialTitle.length} car.)
+                          </label>
+                          <input
+                            value={editSocialTitle}
+                            onChange={e => setEditSocialTitle(e.target.value)}
+                            placeholder="Détecté automatiquement depuis le prompt"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-semibold focus:outline-none focus:border-sky-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                            Paragraphe partage ({editSocialDescription.length} car.)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={editSocialDescription}
+                            onChange={e => setEditSocialDescription(e.target.value)}
+                            placeholder="Accroche pour les réseaux sociaux"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                            Hashtags
+                          </label>
+                          <input
+                            value={editHashtags}
+                            onChange={e => setEditHashtags(e.target.value)}
+                            placeholder="#meteo #previsions #France #MeteoClimatPro"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-400"
+                          />
+                        </div>
                       </div>
                     </div>
 

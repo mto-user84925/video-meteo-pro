@@ -331,6 +331,74 @@ def tts_charon(text, out_wav):
         wf.setframerate(24000)
         wf.writeframes(pcm)
 
+def media_duration(path):
+    """Durée réelle d'un visuel (GIF animé ou vidéo) ; 0.0 pour une image fixe."""
+    try:
+        out = subprocess.check_output([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", path
+        ], stderr=subprocess.DEVNULL).decode().strip()
+        return float(out) if out and out != "N/A" else 0.0
+    except Exception:
+        return 0.0
+
+
+def rebalance_for_animations(scene_durs, gif_durs, voice_dur):
+    """Ajuste la durée des scènes contenant un GIF animé.
+
+    Problème corrigé : la durée d'une scène était répartie uniquement selon le
+    nombre de caractères de sa voix off. Un GIF de 30 s illustrant 46 mots
+    (~15 s) était donc coupé au milieu, sans jamais montrer la fin de la
+    prévision. Désormais :
+
+      1. on alloue au GIF la durée de SON animation (jamais moins) ;
+      2. on retire ce temps aux autres scènes au prorata ;
+      3. si la voix off est trop courte pour couvrir tous les GIF, on signale
+         précisément combien de mots manquent (le moteur boucle l'animation,
+         mais la voix et l'image se désynchronisent).
+    """
+    if not gif_durs or all(d <= 0 for d in gif_durs):
+        return scene_durs, []
+
+    warnings = []
+    adjusted = list(scene_durs)
+
+    # 1. Durée plancher = durée de l'animation pour chaque scène GIF.
+    for i, gdur in enumerate(gif_durs):
+        if gdur > 0 and adjusted[i] < gdur:
+            warnings.append((i, gdur, adjusted[i]))
+            adjusted[i] = gdur
+
+    # 2. Les scènes fixes absorbent la différence au prorata de leur poids,
+    #    sans jamais descendre sous MIN_SCENE_DUR (lisibilité broadcast).
+    MIN_SCENE_DUR = 2.0
+    free_idx = [i for i, d in enumerate(gif_durs) if d <= 0]
+    total = sum(adjusted)
+    extra = total - sum(scene_durs)
+
+    if free_idx and abs(extra) > 0.01:
+        free_total = sum(scene_durs[i] for i in free_idx)
+        if free_total > 0:
+            ratio = (free_total - extra) / free_total
+            if ratio > 0:
+                for i in free_idx:
+                    adjusted[i] = max(MIN_SCENE_DUR, scene_durs[i] * ratio)
+
+    # 3. Si le total obtenu dépasse la durée de la voix off, la demande est
+    #    irréalisable : les animations sont trop longues pour ce bulletin.
+    #    On conserve alors la répartition d'origine et l'appelant avertit
+    #    qu'il faut rallonger la voix off (ou raccourcir l'animation).
+    total = sum(adjusted)
+    if total > voice_dur + 0.5:
+        return list(scene_durs), warnings
+
+    # 4. Renormalisation finale sur la durée réelle de la voix.
+    if total > 0:
+        adjusted = [d * voice_dur / total for d in adjusted]
+
+    return adjusted, warnings
+
+
 def render(job_file):
     with open(job_file, "r", encoding="utf-8") as f:
         job = json.load(f)
@@ -393,6 +461,10 @@ def render(job_file):
         print("💡 Mode Visuel Unique Détecté : Application automatique de cadrages broadcast dynamiques multi-angles (Plan large, Zoom Nord-Ouest, Zoom Centre, Focus Cœur, Vue finale) !")
         progress(session_id, 19, "🎬 Adaptation multi-angles broadcast (visuel unique)...", "info")
 
+    # Durée d'animation de chaque scène (0.0 si image fixe), remplie pendant le
+    # téléchargement des visuels puis utilisée pour rééquilibrer les scènes.
+    gif_durs = [0.0] * len(scenes_data)
+
     for idx, sc_in in enumerate(scenes_data):
         sc_id = f"scene{idx+1}"
         file_input = sc_in["file"]
@@ -405,6 +477,12 @@ def render(job_file):
             shutil.copyfile(file_input, local_file)
 
         is_gif = local_file.lower().endswith(".gif")
+
+        # Durée réelle de l'animation (0.0 pour une image fixe).
+        if is_gif:
+            gif_durs.append(media_duration(local_file))
+            if gif_durs[-1] <= 0:
+                print(f"⚠️ Durée du GIF scène {idx + 1} illisible : traité comme une image fixe.")
 
         # Cadrages broadcast multi-angles si une seule image est fournie
         if is_single_image_mode and not is_gif:
@@ -518,6 +596,40 @@ def render(job_file):
             "overlay_ls": overlay_ls
         })
         t_cursor += dur
+
+    # ── Rééquilibrage des scènes animées ────────────────────────────────────
+    # Un GIF doit être vu en entier : on étend sa scène à la durée de son
+    # animation réelle et on compense sur les autres scènes.
+    if any(d > 0 for d in gif_durs):
+        total_gif = sum(d for d in gif_durs if d > 0)
+        print(f"🎞️ Animation(s) détectée(s) : {sum(1 for d in gif_durs if d > 0)} GIF totalisant {total_gif:.1f}s")
+        new_durs, adjusted = rebalance_for_animations(scene_durs, gif_durs, voice_dur)
+
+        if adjusted:
+            # La voix off ne couvre pas toutes les animations : on informe
+            # précisément de combien de mots il manque.
+            needed_words = int(round(total_gif * 2.85)) - sum(
+                len(s["script_text"].split()) for s in scenes_data
+            )
+            print(
+                f"⚠️ Voix off trop courte pour couvrir les animations : "
+                f"il manque environ {max(0, needed_words)} mots "
+                f"({total_gif:.0f}s d'animation pour {voice_dur:.0f}s de voix). "
+                f"Les GIF seront joués en boucle."
+            )
+            progress(session_id, 21,
+                     f"⚠️ Voix off courte face aux animations ({max(0, needed_words)} mots manquants)",
+                     "info")
+        elif new_durs != scene_durs:
+            for i, sc in enumerate(scenes):
+                sc["duration"] = new_durs[i]
+            for i, sc in enumerate(scenes):
+                if i + 1 < len(scenes):
+                    scenes[i + 1]["t_start"] = scenes[i]["t_start"] + scenes[i]["duration"]
+            print("✅ Scènes rééquilibrées : chaque GIF joue son animation en entier.")
+            for i, sc in enumerate(scenes):
+                if gif_durs[i] > 0:
+                    print(f"   Scène {i + 1} (GIF {gif_durs[i]:.1f}s) -> {sc['duration']:.1f}s")
 
     # Piste voix off unique (déjà générée d'un seul tenant)
     raw_master_wav = master_clean

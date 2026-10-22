@@ -295,6 +295,12 @@ CATEGORIE : [Choisir : Actualités Météo / Analyses Climatologiques / Vigilanc
 
 **Sources :** [Mentionner uniquement les modèles réellement exploités et les documents fournis, sans nom de média externe. Ne pas inventer d’observations ou d’Observatoire.] Analyse : Météo-Climat Pro.
 
+TITRE PARTAGE : [Titre court et percutant pour les réseaux sociaux, 60 à 90 caractères, sans point final. Il peut différer du titre SEO, mais doit rester factuel et respecter les règles de fiabilité.]
+
+PARAGRAPHE PARTAGE : [Un seul paragraphe de 40 à 60 mots, rédigé pour un fil social : il résume l’enjeu principal, la zone et la période, et se termine de façon à donner envie de lire l’article. Aucun emoji obligatoire, aucun chiffre non étayé.]
+
+HASHTAGS : [#meteo #previsions #[Phénomène] #France #MeteoClimatPro — 5 à 8 hashtags en un seul espace, sans accent dans les hashtags, sans espace à l’intérieur d’un hashtag.]
+
 === FIN ARTICLE ===
 
 ---
@@ -314,6 +320,19 @@ Produis immédiatement les cinq scènes après l’article.
 - Ne pas lire les noms de modèles, les runs ou les échéances techniques sauf nécessité éditoriale.
 - Terminer la scène 5 par : **« et restez connectés avec METEO CLIMAT PRO. »**
 
+## CALIBRAGE DES GIF ANIMÉS — RÈGLE IMPÉRATIVE
+
+Un GIF animé montre une **chronologie** : si la voix off est trop courte, l’animation défile trop vite ou est coupée, et le spectateur ne voit jamais la fin de la prévision. Pour chaque scène qui utilise un GIF :
+
+1. **Estime la durée de l’animation** à partir du nombre d’images qu’elle contient et de leur cadence (en moyenne **1 seconde par image** pour nos GIF de prévision).
+2. **Calcule la voix off nécessaire** : environ **2,8 mots par seconde d’animation**, plus 2 à 3 mots de respiration.
+3. **Indique explicitement cette estimation** dans le champ « Durée animation » de la scène.
+4. **Règle de capacité globale** : la somme des durées d’animation ne doit pas dépasser **35 % du total des voix off**. Si les GIF fournis sont trop longs, choisis une autre carte fixe pour certaines scènes plutôt que de sacrifier le commentaire.
+5. Si un GIF dure **plus de 20 secondes**, réserve-lui l’essentiel d’une demi-durée et raccourcis fortement les scènes voisines.
+6. Un GIF ne doit **jamais** être accompagné d’une voix off plus courte que sa durée d’animation : mieux vaut couvrir moins d’échéances que survoler toute l’animation.
+
+Exemple de calcul à reproduire mentalement : un GIF de 30 images à 1 image par seconde dure 30 secondes ; il faut donc environ **84 mots** de voix off (30 × 2,8) pour le commenter intégralement.
+
 ## CONSTRUCTION
 
 Progression souhaitée, à adapter aux visuels disponibles :
@@ -330,6 +349,7 @@ La cohérence avec les images prime sur cette progression. N’impose pas un th�
 
 SCÈNE 1
 - Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
+- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
 - Badge : [2 à 3 mots en majuscules]
 - Titre : [Majuscules, 32 caractères maximum]
 - Sous-titre : [Court, en majuscules]
@@ -339,6 +359,7 @@ SCÈNE 1
 
 SCÈNE 2
 - Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
+- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
 - Badge : [Adapté au contenu réel]
 - Titre : [Majuscules, 32 caractères maximum]
 - Sous-titre : [Court, en majuscules]
@@ -348,6 +369,7 @@ SCÈNE 2
 
 SCÈNE 3
 - Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile ; si plusieurs visuels, préciser leur ordre]
+- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
 - Badge : [Adapté au contenu réel]
 - Titre : [Majuscules, 32 caractères maximum]
 - Sous-titre : [Court, en majuscules]
@@ -357,6 +379,7 @@ SCÈNE 3
 
 SCÈNE 4
 - Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
+- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
 - Badge : [Adapté au contenu réel]
 - Titre : [Majuscules, 32 caractères maximum]
 - Sous-titre : [Court, en majuscules]
@@ -366,6 +389,7 @@ SCÈNE 4
 
 SCÈNE 5
 - Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
+- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
 - Badge : [Adapté au contenu réel]
 - Titre : [Majuscules, 32 caractères maximum]
 - Sous-titre : [Court, en majuscules]
@@ -379,6 +403,7 @@ Effectue ces vérifications sans afficher de rapport :
 
 1. Chaque fichier cité existe parmi les pièces fournies et porte son nom exact.
 2. Chaque voix off correspond au paramètre, à la zone et à l’échéance du visuel.
+2 bis. Pour chaque GIF, la voix off couvre au moins sa durée d’animation (≈ 2,8 mots par seconde).
 3. Chaque chiffre annoncé dans la vidéo est lisible sur le visuel correspondant.
 4. Aucune carte fixe n’est décrite comme une animation.
 5. Aucun cumul n’est présenté comme une intensité horaire.
@@ -387,6 +412,8 @@ Effectue ces vérifications sans afficher de rapport :
 8. Les cinq voix off totalisent 165 à 175 mots et forment un commentaire continu.
 9. Les titres vidéo ne dépassent pas 32 caractères.
 10. Aucun champ entre crochets ne reste dans le résultat.
+11. Le bloc TITRE PARTAGE / PARAGRAPHE PARTAGE / HASHTAGS est présent à la fin de l’article, dans cet ordre.
+12. Les hashtags sont sans accent et séparés par un seul espace.
 
 Si une scène échoue à la vérification, change le visuel ou reformule son contenu avant de livrer.
 
@@ -430,6 +457,12 @@ export interface ParsedArticleOutput {
   category: string;
   rawBody: string;
   htmlDark: string;
+  /** Titre court pour les réseaux sociaux (TITRE PARTAGE). */
+  socialTitle?: string;
+  /** Paragraphe d'accroche pour les réseaux sociaux (PARAGRAPHE PARTAGE). */
+  socialDescription?: string;
+  /** Hashtags prêts à publier (HASHTAGS). */
+  hashtags?: string;
 }
 
 /**
@@ -692,6 +725,27 @@ export function buildWordForWordArticleHtml(
 
   articleBlock = articleBlock.replace(/===\s*(?:DEBUT|FIN)\s*ARTICLE\s*===/gi, "").trim();
   if (!articleBlock || articleBlock.length < 30) return null;
+
+  // Bloc de partage réseaux sociaux (TITRE PARTAGE / PARAGRAPHE PARTAGE /
+  // HASHTAGS). Il est EXTRUIT du corps : sans cela, ces trois lignes brutes
+  // (« TITRE PARTAGE : … », « HASHTAGS : #… ») se retrouvaient publiées en
+  // clair au bas de l'article sur les sites.
+  const social = { socialTitle: "", socialDescription: "", hashtags: "" };
+  {
+    const grab = (re: RegExp) => {
+      const m = articleBlock.match(re);
+      return m ? m[1].replace(/\*\*/g, "").replace(/^["«]|["»]$/g, "").trim() : "";
+    };
+    social.socialTitle = grab(/(?:^|\n)\s*(?:\*\*)?TITRE\s+PARTAGE(?:\*\*)?\s*:\s*([^\n]+)/i);
+    social.socialDescription = grab(/(?:^|\n)\s*(?:\*\*)?(?:PARAGRAPHE|DESCRIPTION)\s+PARTAGE(?:\*\*)?\s*:\s*([^\n]+)/i);
+    social.hashtags = grab(/(?:^|\n)\s*(?:\*\*)?HASHTAGS?(?:\*\*)?\s*:\s*([^\n]+)/i);
+
+    articleBlock = articleBlock
+      .replace(/(?:^|\n)\s*(?:\*\*)?TITRE\s+PARTAGE(?:\*\*)?\s*:\s*[^\n]+/gi, "")
+      .replace(/(?:^|\n)\s*(?:\*\*)?(?:PARAGRAPHE|DESCRIPTION)\s+PARTAGE(?:\*\*)?\s*:\s*[^\n]+/gi, "")
+      .replace(/(?:^|\n)\s*(?:\*\*)?HASHTAGS?(?:\*\*)?\s*:\s*[^\n]+/gi, "")
+      .trim();
+  }
 
   const lines = articleBlock.split(/\r?\n/);
   let title = "";
@@ -1315,6 +1369,9 @@ export function buildWordForWordArticleHtml(
     excerpt: excerpt || title || "Analyse météorologique complète par Météo-Climat Pro.",
     category,
     rawBody: articleBlock,
-    htmlDark: htmlParts.join("\n")
+    htmlDark: htmlParts.join("\n"),
+    socialTitle: social.socialTitle,
+    socialDescription: social.socialDescription,
+    hashtags: social.hashtags
   };
 }
