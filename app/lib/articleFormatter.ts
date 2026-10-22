@@ -634,6 +634,10 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
   // la balise en début de ligne OU après une ponctuation forte.
   const blocks: Array<{ num: number; body: string }> = [];
   const positions: Array<{ num: number; start: number; tagStart: number }> = [];
+  // Les lignes du bloc de partage (TITRE PARTAGE / PARAGRAPHE PARTAGE /
+  // HASHTAGS) ne font PAS partie du script vidéo : sans ce filtre, le
+  // « TITRE PARTAGE » écrasait le titre de la dernière scène.
+  const SOCIAL_KEYS_RE = /^\s*(?:\*\*)?(?:TITRE\s+PARTAGE|PARAGRAPHE\s+PARTAGE|DESCRIPTION\s+PARTAGE|HASHTAGS?)(?:\*\*)?\s*:/i;
   const headRe = /(?:^|\n|[.!?]\s*)(?:\s*(?:#+\s*|\*\*)*SC[ÈE]NE\s*(\d+)\b[^\n]*)/gi;
   let hm: RegExpExecArray | null;
   while ((hm = headRe.exec(text)) !== null) {
@@ -678,6 +682,12 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
     for (const rawLine of lines) {
       const l = rawLine.trim().replace(/^[-*•]\s*/, "");
       if (!l) continue;
+
+      // Ligne du bloc de partage : hors script vidéo, on l'ignore totalement.
+      if (SOCIAL_KEYS_RE.test(l)) {
+        inVoiceover = false;
+        continue;
+      }
 
       if (!isFieldLine(l)) {
         // Texte libre : suite de la voix off en cours (paragraphe multi-lignes).

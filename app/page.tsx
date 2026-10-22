@@ -1918,6 +1918,12 @@ export default function StudioMeteoPage() {
 
   // Ajout manuel d'une nouvelle scène
   const handleAddScene = () => {
+    // La régie (/api/dispatch) refuse plus de MAX_SCENES scènes : on bloque ici
+    // pour éviter un échec au moment du rendu.
+    if (scenes.length >= MAX_SCENES) {
+      notify(`Limite atteinte : ${MAX_SCENES} scènes maximum par bulletin.`, "warning");
+      return;
+    }
     const nextNum = scenes.length + 1;
     const newScene: Scene = {
       scene_number: nextNum,
