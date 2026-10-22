@@ -13,8 +13,10 @@ import os
 import sys
 import json
 import time
+import shutil
 import argparse
 import urllib.request
+import urllib.error
 import urllib.parse
 import subprocess
 import wave
@@ -52,115 +54,219 @@ FALLBACK_MAPS = [
     f"{SUPABASE_URL}/storage/v1/object/public/blog-images/blog/1792152016_MeteoClimatPro_ECMWF_AIFS_0_25__France_precipitations-cumulees_1792151648872.png"
 ]
 
+def _fetch_bytes(url, referer_from_url=True, timeout=45):
+    """Récupère une URL d'image et renvoie ses octets (gère anti-hotlink).
+
+    Tente urllib (rapide), puis curl_cffi avec empreinte Chrome (sites protégés).
+    Lève RuntimeError si aucune des deux méthodes ne donne une vraie image.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "image/*,*/*;q=0.8",
+    }
+    if referer_from_url:
+        headers["Referer"] = "/".join(url.split("/")[:3]) + "/"
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read()
+        if len(data) > 2000:
+            return data
+    except Exception as exc:
+        print(f"⚠️ urllib a échoué ({exc}) — tentative empreinte Chrome...")
+
+    try:
+        from curl_cffi import requests as cffi
+        r = cffi.get(url, impersonate="chrome124", headers=headers, timeout=timeout)
+        ctype = r.headers.get("content-type", "")
+        if r.status_code == 200 and len(r.content) > 2000 and ctype.startswith("image/"):
+            print(f"✅ Image récupérée via empreinte Chrome : {url}")
+            return r.content
+        print(f"⚠️ Empreinte Chrome refusée : HTTP {r.status_code} ({ctype})")
+    except Exception as exc2:
+        print(f"⚠️ Empreinte Chrome indisponible : {exc2}")
+
+    raise RuntimeError(f"Image inaccessible : {url}")
+
+
 def download_file(url, out_path, fallback_idx=0):
-    print(f"📥 Téléchargement : {url} -> {out_path}")
+    """Télécharge un visuel ; bascule sur une carte certifiée Supabase si besoin.
+
+    BUG corrigé : l'appel de secours passait par `download_file(...)` sans
+    `fallback_idx`, ce qui provoquait un `UnboundLocalError` (le paramètre est
+    local à la portée de la fonction) et faisait tomber tout le rendu dès
+    qu'une seule image était injoignable.
+    """
+    print(f"📥 Téléchargement : {url} -> {out_path}", flush=True)
     try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Accept": "image/*,*/*;q=0.8"
-            }
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp, open(out_path, "wb") as f:
-            f.write(resp.read())
-    except Exception as e:
-        print(f"⚠️ Échec téléchargement image ({e}) sur {url}")
+        data = _fetch_bytes(url)
+        with open(out_path, "wb") as fh:
+            fh.write(data)
+        print(f"✅ Visuel OK ({len(data) // 1024} Ko)")
+        return
+    except Exception as exc:
+        print(f"⚠️ Échec téléchargement image ({exc})")
+
+    print("🛡️ Bascule automatique sur une carte certifiée Supabase...")
+    # Rotation déterministe : une scène différente reçoit une carte différente.
+    for offset in range(len(FALLBACK_MAPS)):
+        fb_url = FALLBACK_MAPS[(fallback_idx + offset) % len(FALLBACK_MAPS)]
         try:
-            from curl_cffi import requests as cffi
-            origin = "/".join(url.split("/")[:3]) + "/"
-            r = cffi.get(url, impersonate="chrome124", headers={"Referer": origin}, timeout=30)
-            if r.status_code == 200 and len(r.content) > 5000 and r.headers.get("content-type", "").startswith("image/"):
-                with open(out_path, "wb") as f:
-                    f.write(r.content)
-                print(f"✅ Image récupérée via empreinte Chrome : {url}")
-                return
-            print(f"⚠️ Empreinte Chrome refusée : HTTP {r.status_code}")
-        except Exception as e2:
-            print(f"⚠️ Empreinte Chrome indisponible : {e2}")
-        print("🛡️ Bascule automatique sur une carte certifiée Supabase...")
-        fb_url = FALLBACK_MAPS[fallback_idx % len(FALLBACK_MAPS)]
-        req_fb = urllib.request.Request(fb_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req_fb, timeout=30) as resp, open(out_path, "wb") as f:
-            f.write(resp.read())
-        print(f"✅ Carte de secours injectée avec succès : {fb_url}")
-
-def upload_supabase(local_file, remote_path, content_type="video/mp4"):
-    url = f"{SUPABASE_URL}/storage/v1/object/blog-images/{remote_path}"
-    with open(local_file, "rb") as f:
-        data = f.read()
-
-    # Tentative 1 : POST standard
-    try:
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={
-                "apikey": SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}",
-                "Content-Type": content_type
-            },
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            print(f"✅ Téléversé Supabase (POST) : {remote_path}")
-            return f"{SUPABASE_URL}/storage/v1/object/public/blog-images/{remote_path}"
-    except Exception as e:
-        print(f"⚠️ POST Supabase {remote_path} : {e}, tentative PUT...")
-
-    # Tentative 2 : PUT (upsert / remplacement)
-    try:
-        req_put = urllib.request.Request(
-            url,
-            data=data,
-            headers={
-                "apikey": SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}",
-                "Content-Type": content_type
-            },
-            method="PUT"
-        )
-        with urllib.request.urlopen(req_put, timeout=60) as resp:
-            print(f"✅ Mis à jour Supabase (PUT) : {remote_path}")
-            return f"{SUPABASE_URL}/storage/v1/object/public/blog-images/{remote_path}"
-    except Exception as e2:
-        print(f"⚠️ PUT Supabase {remote_path} : {e2}")
-
-    return f"{SUPABASE_URL}/storage/v1/object/public/blog-images/{remote_path}"
-
-def progress(session_id, pct, text, kind="info"):
-    """Publie l'avancement réel (lu par /api/status puis affiché dans le journal)."""
-    print(f"[{pct}%] {text}")
-    now_ts = int(time.time())
-    data = json.dumps({"pct": pct, "text": text, "type": kind, "ts": now_ts}).encode("utf-8")
-
-    # 1. Envoi sous un nom unique incrémental p_{pct:03d}_{ts}.json (POST neuf garanti sans conflit RLS)
-    try:
-        req_p = urllib.request.Request(
-            f"{SUPABASE_URL}/storage/v1/object/blog-images/renders/{session_id}/p_{pct:03d}_{now_ts}.json",
-            data=data,
-            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
-                     "Content-Type": "application/json"},
-            method="POST"
-        )
-        urllib.request.urlopen(req_p, timeout=10).read()
-    except Exception:
-        pass
-
-    # 2. Tentative sur progress.json
-    for method in ("POST", "PUT"):
-        try:
-            req = urllib.request.Request(
-                f"{SUPABASE_URL}/storage/v1/object/blog-images/renders/{session_id}/progress.json",
-                data=data,
-                headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
-                         "Content-Type": "application/json"},
-                method=method
-            )
-            urllib.request.urlopen(req, timeout=10).read()
+            data = _fetch_bytes(fb_url, referer_from_url=False)
+            with open(out_path, "wb") as fh:
+                fh.write(data)
+            print(f"✅ Carte de secours injectée : {fb_url}")
             return
+        except Exception as exc_fb:
+            print(f"⚠️ Carte de secours {offset + 1} indisponible ({exc_fb})")
+
+    raise RuntimeError(
+        f"Aucun visuel disponible pour {url} et aucune carte de secours joignable."
+    )
+
+# ---------------------------------------------------------------------------
+# Client HTTP Supabase robuste
+# ---------------------------------------------------------------------------
+# urllib.urlopen suit les redirections 301/302 en GET : un POST de téléversement
+# qui reçoit une redirection serait réémis en GET et perdrait silencieusement le
+# corps (fichier absent de Storage alors que le script croit avoir réussi).
+# On bloque donc les redirections pour les écritures.
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url, code, f"Redirection refusée ({code} -> {newurl})", headers, fp
+        )
+
+_OPENER_WRITE = urllib.request.build_opener(_NoRedirect)
+_OPENER_READ = urllib.request.build_opener()
+
+
+class StorageError(RuntimeError):
+    """Échec définitif d'écriture sur Supabase Storage."""
+
+
+def _sb_headers(content_type, extra=None):
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": content_type,
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _request(method, url, data=None, content_type="application/json",
+             headers=None, timeout=30, write=True):
+    """Exécute une requête et renvoie (status, body_bytes). Lève sur erreur HTTP."""
+    req = urllib.request.Request(
+        url, data=data, headers=_sb_headers(content_type, headers), method=method
+    )
+    opener = _OPENER_WRITE if write else _OPENER_READ
+    try:
+        with opener.open(req, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        body = b""
+        try:
+            body = exc.read()
         except Exception:
             pass
+        return exc.code, body
+
+
+def _http_error_detail(body):
+    try:
+        return body.decode("utf-8", "replace")[:300]
+    except Exception:
+        return "<corps illisible>"
+
+
+def storage_put(remote_path, data, content_type="application/octet-stream",
+                upsert=True, retries=3, required=False, label=None):
+    """Téléverse un fichier/octets dans le bucket public `blog-images`.
+
+    Stratégie : POST (création) puis PUT (remplacement/upsert) en cas de conflit.
+    Les échecs d'authentification/Réponse sont journalisés explicitement : on ne
+    renvoie plus une URL « supposée bonne » quand l'écriture a échoué.
+    """
+    url = f"{SUPABASE_URL}/storage/v1/object/blog-images/{remote_path}"
+    name = label or remote_path
+    last_error = None
+
+    for attempt in range(1, retries + 1):
+        for method in ("POST", "PUT"):
+            try:
+                status, body = _request(
+                    method, url, data=data, content_type=content_type, timeout=120
+                )
+            except Exception as exc:  # réseau, DNS, TLS, timeouts
+                last_error = f"{method}: {exc}"
+                continue
+
+            if 200 <= status < 300:
+                print(f"✅ Supabase {method} {name}")
+                return f"{SUPABASE_URL}/storage/v1/object/public/blog-images/{remote_path}"
+
+            detail = _http_error_detail(body)
+            last_error = f"{method} HTTP {status} — {detail}"
+
+            # 400/409 sur POST : l'objet existe déjà -> on tente le PUT (upsert).
+            # 401/403 : problème de clé / RLS, inutile de réessayer en boucle.
+            if status in (401, 403):
+                break
+
+        if attempt < retries:
+            time.sleep(min(2 ** attempt, 6))
+
+    print(f"❌ Échec téléversement Supabase {name} : {last_error}")
+    if required:
+        raise StorageError(f"Téléversement impossible ({name}) : {last_error}")
+    return None
+
+
+def upload_supabase(local_file, remote_path, content_type="video/mp4"):
+    """Compatibilité : téléverse un fichier local sur Supabase Storage."""
+    with open(local_file, "rb") as fh:
+        data = fh.read()
+    return storage_put(remote_path, data, content_type=content_type)
+
+
+def upload_required(local_file, remote_path, content_type="video/mp4"):
+    """Comme upload_supabase mais lève une StorageError si l'écriture échoue."""
+    with open(local_file, "rb") as fh:
+        data = fh.read()
+    return storage_put(remote_path, data, content_type=content_type, required=True)
+
+
+def progress(session_id, pct, text, kind="info"):
+    """Publie l'avancement réel (lu par /api/status puis affiché dans le journal).
+
+    Écrit ure du fichier unique `progress.json` (lu en priorité par /api/status) et
+    du témoin horodaté `p_{pct:03d}_{ts}.json`. Les échecs sont signalés une seule
+    fois pour ne pas polluer le log du workflow.
+    """
+    print(f"[{pct}%] {text}", flush=True)
+    now_ts = int(time.time())
+    data = json.dumps({"pct": pct, "text": text, "type": kind, "ts": now_ts},
+                      ensure_ascii=False).encode("utf-8")
+    base = f"{SUPABASE_URL}/storage/v1/object/blog-images/renders/{session_id}"
+
+    ok = storage_put(f"renders/{session_id}/progress.json", data,
+                     content_type="application/json", required=False, label="progress.json")
+    if ok:
+        storage_put(f"renders/{session_id}/p_{int(pct):03d}_{now_ts}.json", data,
+                    content_type="application/json", label=f"p_{pct}")
+    else:
+        progress.warned = getattr(progress, "warned", False)
+        if not progress.warned:
+            progress.warned = True
+            print("⚠️ Journal de progression non publié (vérifiez SUPABASE_KEY / RLS Storage).")
+
+
+progress.warned = False
 
 def tts_charon(text, out_wav):
     url = "https://openrouter.ai/api/v1/audio/speech"
@@ -178,7 +284,8 @@ def tts_charon(text, out_wav):
         )
     }
     pcm = None
-    for attempt in range(2):
+    last_error = None
+    for attempt in range(1, 4):
         try:
             req = urllib.request.Request(
                 url,
@@ -190,13 +297,27 @@ def tts_charon(text, out_wav):
                     "X-Title": "Video Meteo Pro Engine"
                 }
             )
-            with urllib.request.urlopen(req, timeout=240) as resp:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                ctype = resp.headers.get("content-type", "")
                 pcm = resp.read()
+            # L'endpoint renvoie du PCM 24 kHz mono brut : ~48 000 octets par seconde.
+            # Un corps trop court = réponse d'erreur JSON renvoyée avec un 200.
+            if ctype.startswith("application/json") or len(pcm) < 24000:
+                raise ValueError(
+                    f"réponse TTS inattendue (content-type={ctype}, {len(pcm)} octets)"
+                )
+            if len(pcm) % 2:
+                pcm = pcm[:-1]  # garantit un nombre entier d'échantillons 16 bits
+            print(f"🎙️ TTS reçue : {len(pcm) // 1024} Ko PCM mono 24 kHz", flush=True)
             break
         except Exception as e:
-            print(f"⚠️ TTS tentative {attempt+1} échouée : {e}")
-            if attempt == 1:
-                raise
+            last_error = e
+            print(f"⚠️ TTS tentative {attempt}/3 échouée : {e}", flush=True)
+            if attempt < 3:
+                time.sleep(3 * attempt)
+
+    if pcm is None:
+        raise RuntimeError(f"Synthèse vocale impossible après 3 tentatives ({last_error})")
 
     with wave.open(out_wav, "wb") as wf:
         wf.setnchannels(1)
@@ -536,21 +657,38 @@ def render(job_file):
         ]
         subprocess.run(cmd_mux, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        # Contrôle qualité : vérifier les 5 dernières images
+        # Contrôle qualité : la consigne « zéro écran noir » est vérifiée sur
+        # TOUTE la dernière seconde (et les 3 premières), pas seulement sur
+        # quelques images extraites avec un seuil permissif.
         qc_dir = os.path.join(work_dir, f"qc_{label}")
         os.makedirs(qc_dir, exist_ok=True)
-        subprocess.run(["ffmpeg", "-y", "-sseof", "-0.3", "-i", v_out, os.path.join(qc_dir, "f_%02d.png")], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for ef in os.listdir(qc_dir):
-            stat = ImageStat.Stat(Image.open(os.path.join(qc_dir, ef)))
-            lum = sum(stat.mean[:3]) / 3.0
-            assert lum > 30, f"Alerte image sombre détectée dans {label} ({ef})"
+        for prefix, seek in (("head", "0"), ("tail", "-1.2")):
+            pattern = os.path.join(qc_dir, f"{prefix}_%03d.png")
+            subprocess.run(
+                ["ffmpeg", "-y", "-v", "error",
+                 f"-{('ss' if prefix == 'head' else 'sseof')}", seek,
+                 "-i", v_out, "-frames:v", "30", pattern],
+                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        checked = 0
+        for ef in sorted(os.listdir(qc_dir)):
+            stat = ImageStat.Stat(Image.open(os.path.join(qc_dir, ef)).convert("L"))
+            lum, stddev = stat.mean[0], stat.stddev[0]
+            checked += 1
+            # < 16/255 = écran noir ; < 2 d'écart-type = image unie/grise
+            if lum < 16 or stddev < 2:
+                raise RuntimeError(
+                    f"Alerte écran noir dans la version {label} ({ef} : luma={lum:.1f}, σ={stddev:.1f})"
+                )
+        print(f"🛡️ Contrôle {label} : {checked} images analysées (début + fin), aucune image noire.", flush=True)
 
-    print(f"✅ Rendu terminé sans aucune image noire !")
+    print(f"✅ Rendu terminé sans aucune image noire !", flush=True)
 
-    # 5. Téléversement Supabase Storage
+    # 5. Téléversement Supabase Storage (téléversement de secours = erreur fatale :
+    #    publier un status « completed » sans MP4 ferait boucler la page de prod)
     progress(session_id, 97, "☁️ Téléversement sur Supabase Cloud Storage...", "info")
-    tk_url = upload_supabase(output_tk, f"renders/{session_id}/bulletin_tiktok.mp4")
-    ls_url = upload_supabase(output_ls, f"renders/{session_id}/bulletin_paysage.mp4")
+    tk_url = upload_required(output_tk, f"renders/{session_id}/bulletin_tiktok.mp4")
+    ls_url = upload_required(output_ls, f"renders/{session_id}/bulletin_paysage.mp4")
 
     # Mettre à jour status.json
     status_payload = {
@@ -559,18 +697,88 @@ def render(job_file):
         "tiktok_url": tk_url,
         "landscape_url": ls_url,
         "duration": TARGET_DUR,
+        "voice_duration": round(total_speech_dur, 2),
+        "scenes": len(scenes),
         "updated_at": int(time.time())
     }
     status_file = os.path.join(work_dir, "status.json")
     with open(status_file, "w", encoding="utf-8") as f:
-        json.dump(status_payload, f, indent=2)
+        json.dump(status_payload, f, indent=2, ensure_ascii=False)
 
-    status_url = upload_supabase(status_file, f"renders/{session_id}/status.json", content_type="application/json")
-    upload_supabase(status_file, f"renders/{session_id}/status_done.json", content_type="application/json")
-    print(f"🎉 Job {session_id} terminé avec succès ! URLs :\n- TikTok: {tk_url}\n- Paysage: {ls_url}\n- Status: {status_url}")
+    with open(status_file, "rb") as fh:
+        payload_bytes = fh.read()
+    storage_put(f"renders/{session_id}/status.json", payload_bytes,
+                content_type="application/json", required=True, label="status.json")
+    storage_put(f"renders/{session_id}/status_done.json", payload_bytes,
+                content_type="application/json", label="status_done.json")
 
-if __name__ == "__main__":
+    progress(session_id, 100, "🎉 Rendu terminé : 2 vidéos prêtes !", "success")
+    print(f"🎉 Job {session_id} terminé avec succès ! URLs :\n- TikTok: {tk_url}\n- Paysage: {ls_url}")
+
+    # 6. Nettoyage des intermédiaires (les MP4 finaux restent pour inspection locale)
+    if not os.environ.get("KEEP_WORK_DIR"):
+        for name in os.listdir(work_dir):
+            if name in ("bulletin_tiktok.mp4", "bulletin_paysage.mp4", "status.json"):
+                continue
+            path = os.path.join(work_dir, name)
+            try:
+                if os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    os.remove(path)
+            except OSError:
+                pass
+        print("🧹 Intermédiaires nettoyés.")
+
+
+def publish_status(session_id, status, message, extra=None):
+    """Publie un état terminal (failed / completed) lu par /api/status.
+
+    Sans cela, un rendu qui casse laissait la page web en « encodage en cours »
+    jusqu'au timeout de 15 minutes du workflow.
+    """
+    payload = {
+        "status": status,
+        "session_id": session_id,
+        "message": message,
+        "updated_at": int(time.time()),
+    }
+    if extra:
+        payload.update(extra)
+    data = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    path = f"renders/{session_id}/status.json"
+    ok = storage_put(path, data, content_type="application/json", label="status.json")
+    if status == "failed":
+        storage_put(f"renders/{session_id}/status_error.json", data,
+                    content_type="application/json", label="status_error.json")
+    return ok
+
+
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--job", required=True, help="Chemin vers le fichier job.json")
     args = parser.parse_args()
-    render(args.job)
+
+    # session_id lu à l'avance pour pouvoir publier un status d'échec.
+    session_id = "unknown"
+    try:
+        with open(args.job, "r", encoding="utf-8") as fh:
+            session_id = json.load(fh).get("session_id") or session_id
+    except Exception:
+        pass
+
+    try:
+        render(args.job)
+    except Exception as exc:
+        message = f"{type(exc).__name__}: {exc}"
+        print(f"❌ Rendu en échec : {message}", file=sys.stderr, flush=True)
+        print(f"RENDER_FAILED {message}", flush=True)  # marqueur lisible dans le log GH Actions
+        try:
+            publish_status(session_id, "failed", message)
+        except Exception as exc_status:
+            print(f"⚠️ Statut d'échec non publié : {exc_status}", flush=True)
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

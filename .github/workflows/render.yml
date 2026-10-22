@@ -7,11 +7,27 @@ on:
         description: 'Session ID du rendu'
         required: true
         type: string
+  # Appel direct possible depuis un autre workflow (secours si GITHUB_PAT absent)
+  workflow_call:
+    inputs:
+      session_id:
+        required: true
+        type: string
+
+# Un seul rendu par session à la fois ; les lancements simultanés sont sérialisés
+# au lieu de saturer la file des runners (import de N cartes = 1 seul rendu).
+concurrency:
+  group: render-${{ github.event.inputs.session_id || inputs.session_id }}
+  cancel-in-progress: false
 
 jobs:
   render:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      SESSION_ID: ${{ github.event.inputs.session_id || inputs.session_id }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://ubdevaemtwbzxksjlhjg.supabase.co' }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,7 +38,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install System Dependencies (FFmpeg & Fonts)
-        timeout-minutes: 3
+        timeout-minutes: 4
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=15
@@ -36,13 +52,23 @@ jobs:
 
       - name: Download job.json from Supabase
         run: |
-          curl -f -sSL "https://ubdevaemtwbzxksjlhjg.supabase.co/storage/v1/object/public/blog-images/renders/${{ github.event.inputs.session_id }}/job.json" -o job.json
+          set -e
+          if [ -z "$SESSION_ID" ]; then echo "::error::session_id manquant"; exit 1; fi
+          curl -f -sSL --retry 3 --retry-delay 2 \
+            "$SUPABASE_URL/storage/v1/object/public/blog-images/renders/${SESSION_ID}/job.json" -o job.json
+          # Garde-fou : un corps HTML/erreur ne doit pas être exécuté comme job
+          python -c "import json;json.load(open('job.json',encoding='utf-8'))" \
+            || { echo "::error::job.json invalide ou introuvable"; exit 1; }
 
       - name: Run Video Render Engine
         timeout-minutes: 10
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           python scripts/render_engine.py --job job.json
+
+      # Toujours publier un état terminal lisible par /api/status, même si le
+      # runner est annulé ou les étapes de préparation échouent.
+      - name: Publish failure status
+        if: failure() || cancelled()
+        run: python scripts/publish_failure_status.py --session-id "$SESSION_ID"

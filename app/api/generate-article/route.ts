@@ -82,7 +82,8 @@ RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN
       model: "deepseek/deepseek-v4.1-flash-1017",
       content: rawContent
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Erreur interne serveur" }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erreur interne serveur";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

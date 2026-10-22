@@ -1,7 +1,78 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SUPABASE_URL = "https://ubdevaemtwbzxksjlhjg.supabase.co";
-const ANON_KEY = "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
+export const maxDuration = 60;
+
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://ubdevaemtwbzxksjlhjg.supabase.co";
+// La clé d'écriture vit côté serveur uniquement (jamais dans le bundle client).
+// La clé `sb_publishable_` reste le repli tant que SUPABASE_SERVICE_ROLE_KEY
+// n'est pas configurée, mais elle ne pourra écrire que si les policies RLS
+// autorisent l'insertion anonyme.
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  "sb_publishable_1qhA0xAnNSd3VxpoLdxYrQ_yUemEhaP";
+
+interface UpsertResult {
+  ok: boolean;
+  id?: string;
+  updated: boolean;
+  error?: string;
+}
+
+/**
+ * Écrit un article de façon IDEMPOTENTE : on cherche d'abord le slug, puis on
+ * met à jour s'il existe, sinon on insère. Aucun doublon possible en cas de
+ * double clic ou de re-publication après correction.
+ */
+async function upsertArticle(
+  table: "meteo_posts" | "posts",
+  payload: Record<string, unknown>,
+  headers: Record<string, string>
+): Promise<UpsertResult> {
+  const slug = String(payload.slug);
+  const authHeaders = { ...headers, apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+
+  try {
+    const findRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/${table}?slug=eq.${encodeURIComponent(slug)}&select=id`,
+      { headers: authHeaders, cache: "no-store" }
+    );
+
+    if (findRes.ok) {
+      const found = (await findRes.json()) as Array<{ id: string }>;
+      if (found.length > 0) {
+        const putRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(found[0].id)}`,
+          {
+            method: "PATCH",
+            headers: authHeaders,
+            body: JSON.stringify(payload),
+            cache: "no-store",
+          }
+        );
+        if (!putRes.ok) {
+          return { ok: false, updated: false, error: await putRes.text() };
+        }
+        return { ok: true, id: found[0].id, updated: true };
+      }
+    }
+
+    const postRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+    if (!postRes.ok) {
+      return { ok: false, updated: false, error: await postRes.text() };
+    }
+    const inserted = (await postRes.json().catch(() => [])) as Array<{ id: string }>;
+    return { ok: true, id: inserted?.[0]?.id, updated: false };
+  } catch (err) {
+    return { ok: false, updated: false, error: (err as Error).message };
+  }
+}
 
 function sanitizeHtml(html: string): string {
   if (!html) return "";
@@ -95,21 +166,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Titre et contenu requis." }, { status: 400 });
     }
 
-    const rawSlug = body.slug ? String(body.slug).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") : "";
-    const slug = rawSlug || slugify(title);
+    // Slug stable : si le client fournit un slug explicite (édition d'un article
+    // existant), on le réutilise tel quel au lieu de le re-horodater -> une
+    // re-publication MET À JOUR l'article au lieu de créer un doublon.
+    const explicitSlug = body.slug
+      ? String(body.slug).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "")
+      : "";
+    const slug = explicitSlug || slugify(title);
     const cleanExcerpt = (excerpt || title || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 300);
     const darkHtml = sanitizeHtml(content_dark);
     const lightHtml = sanitizeHtml(content_light || adaptToLightTheme(darkHtml));
     const nowIso = new Date().toISOString();
 
     const headers = {
-      apikey: ANON_KEY,
-      Authorization: `Bearer ${ANON_KEY}`,
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
       "Content-Type": "application/json",
-      Prefer: "return=representation"
+      Prefer: "return=representation",
     };
 
-    // 1. Insertion maîtresse dans meteo_posts (lue par les 3 sites)
     const meteoPostPayload = {
       title,
       slug,
@@ -119,48 +194,38 @@ export async function POST(req: NextRequest) {
       published: true,
       published_at: nowIso,
       category,
-      author
+      author,
     };
 
-    const resMeteo = await fetch(`${SUPABASE_URL}/rest/v1/meteo_posts`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(meteoPostPayload)
-    });
-
-    if (!resMeteo.ok) {
-      const errTxt = await resMeteo.text();
-      return NextResponse.json({ error: `Erreur Supabase (meteo_posts): ${errTxt}` }, { status: 500 });
+    // 1. Upsert idempotent dans meteo_posts (clé naturelle : slug).
+    //    BUG corrigé : l'ancien code faisait toujours un POST, donc chaque clic
+    //    sur « Publier » créait un nouvel article en double.
+    const published = await upsertArticle("meteo_posts", meteoPostPayload, headers);
+    if (!published.ok) {
+      return NextResponse.json(
+        { error: `Erreur Supabase (meteo_posts): ${published.error}` },
+        { status: 502 }
+      );
     }
 
-    const insertedMeteo = await resMeteo.json();
-
     // 2. Synchronisation de la version claire dans posts (MétéoBTP Pro & Climat-Météo)
-    let postsInserted = false;
-    try {
-      const resPosts = await fetch(`${SUPABASE_URL}/rest/v1/posts`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          ...meteoPostPayload,
-          content: lightHtml
-        })
-      });
-      postsInserted = resPosts.ok;
-      if (!resPosts.ok) {
-        console.warn("[publish-article] Note insertion posts:", await resPosts.text());
-      }
-    } catch (e: any) {
-      console.warn("[publish-article] Exception insertion posts:", e?.message);
+    const postsSync = await upsertArticle(
+      "posts",
+      { ...meteoPostPayload, content: lightHtml },
+      headers
+    );
+    if (!postsSync.ok) {
+      console.warn("[publish-article] Note synchronisation posts:", postsSync.error);
     }
 
     return NextResponse.json({
       success: true,
       slug,
-      id: insertedMeteo?.[0]?.id,
+      id: published.id,
+      updated: published.updated,
       synced_tables: {
         meteo_posts: true,
-        posts: postsInserted
+        posts: postsSync.ok
       },
       urls: {
         meteobtp: `https://meteobtp.fr/actualites/${slug}`,
@@ -168,7 +233,8 @@ export async function POST(req: NextRequest) {
         climatmeteo: `https://climat-meteo.vercel.app/actualites/${slug}`
       }
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Erreur serveur" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Erreur serveur";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

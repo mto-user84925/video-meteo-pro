@@ -99,7 +99,7 @@ function cleanCandidateUrls(rawCandidates: string[], baseUrl: string): string[] 
   return validUrls;
 }
 
-function parseJsonSafe(raw: string): any {
+function parseJsonSafe(raw: string): unknown {
   const cleaned = (raw || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
     let coverImage = "";
     let contentImages: string[] = [];
     let articleText = "";
-    let rawImageCandidates: string[] = [];
+    const rawImageCandidates: string[] = [];
     let methodUsed = "none";
 
     // ========================================================================
@@ -435,7 +435,7 @@ export async function POST(req: Request) {
       return candidate; // conservée telle quelle : render_engine la téléchargera via empreinte Chrome
     };
 
-    const generateAiScript = async (): Promise<{ scenes: any[]; phenomenon: string }> => {
+    const generateAiScript = async (): Promise<{ scenes: Array<Record<string, unknown>>; phenomenon: string }> => {
       if (!OPENROUTER_API_KEY || !articleText) return { scenes: [], phenomenon: "" };
       const systemPrompt = `Tu es le rédacteur météo en chef pour Météo-Climat Pro et Monsieur Météo (Patrick Marlière).
 À partir de l'article météo fourni, génère un script vidéo structuré en EXACTEMENT ${numScenes} SCÈNES calibrées pour une durée globale de ${durationSec} SECONDES (soit un total d'environ ${totalWordsTarget} mots), et identifie le phénomène météo principal.
@@ -496,7 +496,8 @@ Format JSON STRICT :
         if (aiRes.ok) {
           const aiData = await aiRes.json();
           const parsed = parseJsonSafe(aiData.choices?.[0]?.message?.content || "{}");
-          return { scenes: parsed.scenes || [], phenomenon: parsed.phenomenon || "" };
+          const obj = (parsed ?? {}) as { scenes?: Array<Record<string, unknown>>; phenomenon?: string };
+    return { scenes: obj.scenes || [], phenomenon: obj.phenomenon || "" };
         }
       } catch (aiErr) {
         console.error("Erreur IA Gemini Flash:", aiErr);
@@ -561,7 +562,7 @@ Format JSON STRICT :
       }
     );
 
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Erreur d'importation de l'article" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur d'importation de l'article" }, { status: 500 });
   }
 }

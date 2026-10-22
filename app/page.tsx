@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Sparkles,
   Video,
@@ -36,6 +36,15 @@ import {
   parseFullVideoScript,
   ParsedArticleOutput
 } from "./lib/articleFormatter";
+import {
+  ArticleBlock,
+  buildArticleBlocks,
+  applyArticleEdits,
+  buildArticleSlug,
+  buildExcerpt,
+  sanitizeInlineHtml,
+  textToInlineHtml
+} from "./lib/articleEditor";
 
 interface LogEntry {
   id: string;
@@ -369,6 +378,32 @@ export default function StudioMeteoPage() {
   const [showArticlePreview, setShowArticlePreview] = useState(true);
   const [generatingWithDeepseek, setGeneratingWithDeepseek] = useState(false);
 
+  // ✏️ ÉDITION STRUCTURÉE AVANT PUBLICATION
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editExcerpt, setEditExcerpt] = useState("");
+  const [editCategory, setEditCategory] = useState("Actualités Météo");
+  const [editAuthor, setEditAuthor] = useState("Patrick Marlière & Météo-Climat Pro");
+  const [editSlug, setEditSlug] = useState("");
+  const [editBlocks, setEditBlocks] = useState<ArticleBlock[]>([]);
+  const [editHistory, setEditHistory] = useState<Array<{ title: string; excerpt: string; category: string; author: string; blocks: ArticleBlock[] }>>([]);
+
+  /** Charge l'article parsé dans l'éditeur (à chaque nouveau parse / changement de thème). */
+  const hydrateEditor = useCallback((article: ParsedArticleOutput) => {
+    setEditTitle(article.title || "");
+    setEditExcerpt(article.excerpt || "");
+    setEditCategory(article.category || "Actualités Météo");
+    setEditSlug("");
+    setEditBlocks(buildArticleBlocks(article.htmlDark));
+    setEditHistory([]);
+  }, []);
+
+  /** HTML corrigé à publier : reconstruit depuis les blocs édités. */
+  const editedHtml = parsedArticle
+    ? applyArticleEdits(parsedArticle.htmlDark, editBlocks)
+    : "";
+  const hasArticleEdits = parsedArticle ? editedHtml !== parsedArticle.htmlDark : false;
+
   // Configuration Principale
   const [phenomenon, setPhenomenon] = useState(PHENOMENONS[0]);
   const [customPhenomenon, setCustomPhenomenon] = useState("");
@@ -569,6 +604,13 @@ export default function StudioMeteoPage() {
     setImportSuccessMessage("");
     setScenes(createEmptyScenes(5));
     setParsedArticle(null);
+    setIsEditMode(false);
+    setEditTitle("");
+    setEditExcerpt("");
+    setEditCategory("Actualités Météo");
+    setEditSlug("");
+    setEditBlocks([]);
+    setEditHistory([]);
     setCoverImageUrl("");
     setCoverImageName("");
     setBatchUploadedImages([]);
@@ -700,8 +742,16 @@ export default function StudioMeteoPage() {
 
   // PUBLICATION DE L'ACTUALITÉ SUR LES 3 SITES (0-BUILD)
   const handlePublishArticle = async (articleToPublish?: ParsedArticleOutput | null) => {
-    const targetArticle = articleToPublish || parsedArticle;
-    if (!targetArticle || !targetArticle.title || !targetArticle.htmlDark) {
+    const source = articleToPublish || parsedArticle;
+    // Quand l'article courant est celui affiché, on publie la version ÉDITÉE
+    // (titre, chapeau, catégorie et texte corrigés dans l'éditeur).
+    const isCurrent = !articleToPublish || articleToPublish === parsedArticle;
+    const publishTitle = isCurrent && editTitle.trim() ? editTitle.trim() : (source?.title || "");
+    const publishHtml = isCurrent && editBlocks.length > 0 ? editedHtml : (source?.htmlDark || "");
+    const publishExcerpt = isCurrent && editExcerpt.trim() ? editExcerpt.trim() : (source?.excerpt || "");
+    const publishCategory = isCurrent && editCategory.trim() ? editCategory.trim() : (source?.category || "Actualités Météo");
+
+    if (!source || !publishTitle || !publishHtml) {
       notify("Aucun article à publier. Collez d'abord le résultat de votre Prompt IA ou rédigez avec DeepSeek.", "warning");
       return;
     }
@@ -714,8 +764,11 @@ export default function StudioMeteoPage() {
     setArticleElapsedSeconds(0);
 
     addArticleLog("🚀 Lancement de la publication simultanée 0-Build...", "publish");
-    addArticleLog(`📝 Titre : "${targetArticle.title}"`, "info");
-    addArticleLog(`🏷️ Catégorie : ${targetArticle.category}`, "info");
+    addArticleLog(`📝 Titre : "${publishTitle}"`, "info");
+    addArticleLog(`🏷️ Catégorie : ${publishCategory}`, "info");
+    if (hasArticleEdits) {
+      addArticleLog("✏️ Version corrigée dans l'éditeur publiée (corrections manuelles incluses).", "info");
+    }
 
     const timer = setInterval(() => {
       setArticleElapsedSeconds(Math.floor((Date.now() - tStart) / 1000));
@@ -729,22 +782,34 @@ export default function StudioMeteoPage() {
         addArticleLog(`📸 Photo de couverture associée : ${coverImageName || 'Couverture active'}`, "images");
       }
 
+      // Slug stable : ré-utilisé tel quel après la première publication, ce qui
+      // transforme une re-publication en MISE À JOUR au lieu d'un doublon.
+      const explicitSlug = editSlug.trim() || buildArticleSlug(publishTitle, String(Math.floor(Date.now() / 1000)));
+
       const res = await fetch("/api/publish-article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: targetArticle.title,
-          excerpt: targetArticle.excerpt,
-          category: targetArticle.category,
-          content_dark: targetArticle.htmlDark,
+          title: publishTitle,
+          excerpt: buildExcerpt(publishExcerpt, publishTitle),
+          category: publishCategory,
+          author: editAuthor.trim() || undefined,
+          slug: explicitSlug,
+          content_dark: publishHtml,
           image_url: coverUrl
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur de publication.");
 
+      if (data.slug) setEditSlug(data.slug);
       setArticleProgressPercent(90);
-      addArticleLog("☁️ Synchronisation Supabase Cloud terminée (tables meteo_posts & posts) !", "publish");
+      addArticleLog(
+        data.updated
+          ? "☁️ Article existant mis à jour sur Supabase (aucun doublon créé) !"
+          : "☁️ Synchronisation Supabase Cloud terminée (tables meteo_posts & posts) !",
+        "publish"
+      );
       addArticleLog(`✨ meteobtp.fr (Thème Clair Pro) : ${data.urls.meteobtp}`, "success");
       addArticleLog(`✨ monsieurmeteo.com (Dark Glass) : ${data.urls.monsieurmeteo}`, "success");
       addArticleLog(`✨ climat-meteo.vercel.app : ${data.urls.climatmeteo}`, "success");
@@ -818,6 +883,7 @@ export default function StudioMeteoPage() {
       const art = buildWordForWordArticleHtml(raw, activeTheme, existingImagesByRef);
       if (art) {
         setParsedArticle(art);
+        hydrateEditor(art);
         if (art.title) setTopic(art.title);
         addArticleLog(`📰 Article web structuré mot pour mot : "${art.title}"`, "success");
         addArticleLog(`🏷️ Catégorie : ${art.category} • Chapeau : "${art.excerpt?.slice(0, 80)}..."`, "info");
@@ -1010,7 +1076,27 @@ export default function StudioMeteoPage() {
         ? detectBestArticleTheme(manualPromptText)
         : (ARTICLE_THEMES.find(t => t.id === newThemeId) || ARTICLE_THEMES[0]);
       const reParsed = buildWordForWordArticleHtml(manualPromptText, activeTheme, existingImagesByRef);
-      if (reParsed) setParsedArticle(reParsed);
+      if (reParsed) {
+        // Les corrections textuelles saisies par l'utilisateur sont conservées :
+        // on réapplique ses modifications de texte sur le nouveau thème visuel.
+        const usersEdits = editBlocks
+          .filter(b => b.text !== b.original)
+          .map(b => ({ label: b.label, text: b.text }));
+        let repaired = reParsed;
+        if (usersEdits.length > 0) {
+          const freshBlocks = buildArticleBlocks(reParsed.htmlDark).map(fb => {
+            const match = usersEdits.find(u => u.label === fb.label);
+            return match ? { ...fb, text: match.text } : fb;
+          });
+          repaired = { ...reParsed, htmlDark: applyArticleEdits(reParsed.htmlDark, freshBlocks) };
+          notify(`🎨 Thème « ${activeTheme.badge} » appliqué, ${usersEdits.length} correction(s) conservée(s).`, "info");
+        }
+        setParsedArticle(repaired);
+        setEditBlocks(buildArticleBlocks(repaired.htmlDark));
+        setEditTitle(repaired.title || "");
+        setEditExcerpt(repaired.excerpt || "");
+        setEditCategory(repaired.category || "Actualités Météo");
+      }
     }
   };
 
@@ -1079,6 +1165,7 @@ export default function StudioMeteoPage() {
       const art = buildWordForWordArticleHtml(raw, activeTheme, existingImagesByRef);
       if (art) {
         setParsedArticle(art);
+        hydrateEditor(art);
         if (art.title) setTopic(art.title);
         addArticleLog(`📰 Article web structuré mot pour mot : "${art.title}"`, "success");
         addArticleLog(`🏷️ Catégorie : ${art.category} • Chapeau : "${art.excerpt?.slice(0, 80)}..."`, "info");
@@ -2360,25 +2447,163 @@ export default function StudioMeteoPage() {
               </div>
             )}
 
-            {/* APERÇU DU CONTENU HTML RENDU EN DIRECT (MOT POUR MOT) */}
+            {/* APERÇU / ÉDITION DU CONTENU AVANT PUBLICATION (MOT POUR MOT) */}
             {showArticlePreview && (
-              <div className="mt-3 bg-slate-950 p-6 rounded-xl border border-slate-800 max-h-[500px] overflow-y-auto">
-                <div className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
-                  <span>Aperçu de l'article (Rendu Dark Glass Monsieur Météo)</span>
-                  <span className="text-amber-400">100% Fidèle aux mots de l'IA</span>
+              <div className="mt-3 bg-slate-950 p-6 rounded-xl border border-slate-800">
+                <div className="text-[11px] uppercase tracking-wider font-bold mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                  <span className="text-slate-500">
+                    {isEditMode ? "✏️ Édition de l'article avant publication" : "Aperçu de l'article (Rendu Dark Glass Monsieur Météo)"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {hasArticleEdits && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 normal-case font-bold">
+                        {editBlocks.filter(b => b.text !== b.original).length} bloc(s) corrigé(s)
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsEditMode(v => !v)}
+                      className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer normal-case ${
+                        isEditMode
+                          ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                          : "bg-slate-800 text-sky-300 hover:bg-slate-700 border border-slate-700"
+                      }`}
+                      title="Corriger le titre, le chapeau et chaque paragraphe avant de publier"
+                    >
+                      {isEditMode ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Wand2 className="w-3.5 h-3.5" />}
+                      {isEditMode ? "Terminer l'édition" : "✏️ Modifier l'article"}
+                    </button>
+                  </div>
                 </div>
-                {coverImageUrl && (
-                  <div className="mb-6 rounded-xl overflow-hidden border border-slate-800 shadow-lg max-w-xl mx-auto">
-                    <img src={coverImageUrl} alt="Couverture" className="w-full h-auto object-cover" />
-                    <div className="p-2 bg-slate-900 text-[11px] text-slate-400 text-center italic">
-                      Photo de couverture 16:9 affichée en en-tête des 3 sites
+
+                {isEditMode ? (
+                  <div className="space-y-4">
+                    {/* MÉTADONNÉES ÉDITABLES */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-1">Titre SEO</label>
+                        <input
+                          value={editTitle}
+                          onChange={e => setEditTitle(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                          Chapeau / Extrait ({editExcerpt.length} caractères)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={editExcerpt}
+                          onChange={e => setEditExcerpt(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Catégorie</label>
+                        <input
+                          value={editCategory}
+                          onChange={e => setEditCategory(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Auteur</label>
+                        <input
+                          value={editAuthor}
+                          onChange={e => setEditAuthor(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                          Slug / URL {editSlug ? "(article déjà publié : le modifier crée une NOUVELLE URL)" : "(généré automatiquement)"}
+                        </label>
+                        <input
+                          value={editSlug}
+                          onChange={e => setEditSlug(e.target.value)}
+                          placeholder="meteo-retour-de-la-pluie-1792667167"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-emerald-300 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* BLOCS ÉDITABLES */}
+                    <div className="max-h-[460px] overflow-y-auto space-y-2 pr-1">
+                      {editBlocks.map((block, i) => (
+                        <div key={block.id} className="bg-slate-900/40 border border-slate-800 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-[10px] font-black uppercase tracking-wider ${
+                              block.kind === "h1" ? "text-amber-400"
+                                : block.kind === "h2" || block.kind === "h3" ? "text-sky-400"
+                                : block.kind === "table" ? "text-slate-500"
+                                : "text-slate-400"
+                            }`}>
+                              {block.label}
+                              {block.kind === "table" && " (non éditable)"}
+                            </span>
+                            {block.text !== block.original && (
+                              <button
+                                type="button"
+                                onClick={() => setEditBlocks(prev => prev.map((b, idx) => idx === i ? { ...b, text: b.original } : b))}
+                                className="text-[10px] text-slate-500 hover:text-rose-400 font-bold cursor-pointer"
+                                title="Annuler la correction de ce bloc"
+                              >
+                                ↺ Annuler
+                              </button>
+                            )}
+                          </div>
+                          {block.kind === "table" ? (
+                            <p className="text-[11px] text-slate-500 italic">Tableau publié tel quel (modifiez-le dans le texte source si nécessaire).</p>
+                          ) : block.kind === "h1" || block.kind === "h2" || block.kind === "h3" ? (
+                            <input
+                              value={block.text}
+                              onChange={e => setEditBlocks(prev => prev.map((b, idx) => idx === i ? { ...b, text: e.target.value } : b))}
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          ) : (
+                            <textarea
+                              rows={Math.min(10, Math.max(2, Math.ceil(block.text.length / 100)))}
+                              value={block.text}
+                              onChange={e => setEditBlocks(prev => prev.map((b, idx) => idx === i ? { ...b, text: e.target.value } : b))}
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 leading-relaxed focus:outline-none focus:border-amber-400"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                      <span className="text-[11px] text-slate-500">
+                        Balises inline autorisées : <code className="text-slate-300">&lt;strong&gt;</code>, <code className="text-slate-300">&lt;em&gt;</code>, <code className="text-slate-300">&lt;a href&gt;</code>. Le thème visuel est conservé.
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditMode(false)}
+                          className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black cursor-pointer"
+                        >
+                          ✓ Valider les corrections
+                        </button>
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="max-h-[500px] overflow-y-auto">
+                    {coverImageUrl && (
+                      <div className="mb-6 rounded-xl overflow-hidden border border-slate-800 shadow-lg max-w-xl mx-auto">
+                        <img src={coverImageUrl} alt="Couverture" className="w-full h-auto object-cover" />
+                        <div className="p-2 bg-slate-900 text-[11px] text-slate-400 text-center italic">
+                          Photo de couverture 16:9 affichée en en-tête des 3 sites
+                        </div>
+                      </div>
+                    )}
+                    <div
+                      dangerouslySetInnerHTML={{ __html: editedHtml || parsedArticle.htmlDark }}
+                      className="prose prose-invert max-w-none text-sm"
+                    />
+                  </div>
                 )}
-                <div
-                  dangerouslySetInnerHTML={{ __html: parsedArticle.htmlDark }}
-                  className="prose prose-invert max-w-none text-sm"
-                />
               </div>
             )}
           </section>

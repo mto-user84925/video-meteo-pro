@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+// Appel LLM : sans plafond explicite, la fonction Vercel s'arrête au défaut
+// de la plateforme (souvent 10 s) et retombe sur la suggestion saisonnière.
+export const maxDuration = 45;
+
 const PHENOMENONS = [
   "Épisode méditerranéen / Cévenol",
   "Tempête / Coup de vent violent",
@@ -15,6 +19,13 @@ const PHENOMENONS = [
 
 export async function GET(req: Request) {
   try {
+    // La suggestion dépend du jour et d'un appel LLM : on lit systématiquement
+    // un en-tête de requête pour que Next n'essaie PAS de pré-rendre cette route
+    // au build (ce qui provoquait un `fetch()` rejeté pendant le prerender et un
+    // repli silencieux sur la suggestion saisonnière en production).
+    const dynamicSignal = req.headers.get("x-session-id") || req.headers.get("user-agent") || "";
+    void dynamicSignal;
+
     const apiKey = process.env.OPENROUTER_API_KEY || "";
     const now = new Date();
     const dateStr = now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -65,8 +76,8 @@ Format de réponse JSON STRICT uniquement :
             });
           }
         }
-      } catch (e: any) {
-        console.warn("[daily-weather-topic] Erreur OpenRouter, fallback local:", e.message);
+      } catch (e) {
+        console.warn("[daily-weather-topic] Erreur OpenRouter, fallback local:", e instanceof Error ? e.message : e);
       }
     }
 
@@ -96,7 +107,7 @@ Format de réponse JSON STRICT uniquement :
       target_duration: 60,
       summary: "Suggestion saisonnière automatique Météo-Climat Pro."
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Erreur interne" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur interne" }, { status: 500 });
   }
 }

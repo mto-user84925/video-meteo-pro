@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   try {
     const { phenomenon, topic, notes, target_duration = 60, scene_count = 5 } = await req.json();
@@ -80,7 +82,7 @@ Durée totale ciblée : ${durationSec} secondes (environ ${totalWordsTarget} mot
     const parsed = JSON.parse(s !== -1 && e > s ? rawContent.slice(s, e + 1) : rawContent);
 
     return NextResponse.json(parsed);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Erreur interne" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erreur interne" }, { status: 500 });
   }
 }
