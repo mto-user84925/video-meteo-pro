@@ -222,6 +222,16 @@ Tu es journaliste météo-climat senior, rédacteur SEO, vulgarisateur scientifi
 
 Les deux livrables doivent être prêts à copier-coller dans notre studio.
 
+## LIVRAISON EN FICHIER .TXT
+
+Enregistre l’intégralité de ta réponse (article + balises === DEBUT/FIN ARTICLE === + bloc de partage + script vidéo) dans **un seul fichier texte nommé « bulletin_meteo.txt »** et propose-le en téléchargement.
+
+Règles du fichier :
+- Encodage **UTF-8**, texte brut, **aucun bloc de code markdown** autour du contenu.
+- Conserve exactement les libellés et séparateurs attendus : TITRE SEO :, CHAPEAU :, CATEGORIE :, === DEBUT ARTICLE ===, === FIN ARTICLE ===, TITRE PARTAGE :, PARAGRAPHE PARTAGE :, HASHTAGS :, SCÈNE N, puis les champs « - Image à utiliser : », « - Badge : », « - Titre : », « - Sous-titre : », « - Localisation : », « - Bandeau Infos Météo : » et « Voix off Charon : ».
+- Ne mets **aucun commentaire, aucune explication et aucune phrase d’introduction** dans le fichier : uniquement les livrables.
+- Si la production d’un fichier n’est pas possible, écris l’intégralité du contenu dans le chat, dans le même format, sans rien abréger.
+
 ---
 
 ## 1. FIABILITÉ ET SIGNATURE
@@ -625,6 +635,12 @@ export interface ParsedVideoScene {
 }
 
 export function parseFullVideoScript(text: string): ParsedVideoScene[] {
+  // Normalisation préalable : retours chariot Mac (CR isolé) et encadrés de
+  // bloc markdown (```text ... ```) que ChatGPT ajoute parfois quand on lui
+  // demande un fichier. Sans cela, tout le texte était vu comme une seule
+  // ligne et aucune scène n'était reconnue.
+  text = text.replace(/\r\n?/g, "\n").replace(/^\s*```[a-zA-Z]*\s*$/gm, "");
+
   const defaultBadges = ["SURVEILLANCE MÉTÉO", "ANALYSE MÉTÉO", "ZONES EXPOSÉES", "RAFALES MAXIMALES", "FORTES PLUIES"];
   const defaultTitles = ["RISQUE DE TEMPÊTE", "DÉPRESSIONS ATLANTIQUES", "LE NORD-OUEST EXPOSÉ", "POINTES À PLUS DE 100 KM/H", "SITUATION À SURVEILLER"];
 
@@ -801,6 +817,10 @@ export function buildWordForWordArticleHtml(
   theme: ArticleTheme,
   imagesByRef: Record<number, { url: string; name: string }>
 ): ParsedArticleOutput | null {
+  // Normalisation : retours chariot Mac et encadrés de bloc markdown ajoutés
+  // par ChatGPT lorsqu'il livre un fichier .txt.
+  rawText = rawText.replace(/\r\n?/g, "\n").replace(/^\s*```[a-zA-Z]*\s*$/gm, "");
+
   // 1. Extraire les scènes complètes du script vidéo (LIVRABLE 2)
   const parsedVideoScenes = parseFullVideoScript(rawText);
   const sceneCount = parsedVideoScenes.length || 5;
