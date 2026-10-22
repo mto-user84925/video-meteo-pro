@@ -473,7 +473,11 @@ def render(job_file):
         if file_input.startswith("http://") or file_input.startswith("https://"):
             download_file(file_input, local_file, idx)
         else:
-            import shutil
+            # BUG corrigé : `import shutil` local dans cette branche faisait de
+            # `shutil` une variable LOCALE à render(), ce qui provoquait un
+            # UnboundLocalError au nettoyage final (« cannot access local
+            # variable 'shutil' ») et faisait échouer le job après l'encodage.
+            # shutil est déjà importé au niveau module.
             shutil.copyfile(file_input, local_file)
 
         is_gif = local_file.lower().endswith(".gif")
