@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { MASTER_PROMPT_ARTICLE_AND_VIDEO } from "@/app/lib/articleFormatter";
+import { buildMasterPrompt } from "@/app/lib/articleFormatter";
 
 // Autoriser jusqu'à 60 secondes pour la génération complète de l'article et des scènes
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, phenomenon, topic, notes, target_duration = 60, scene_count = 5 } = await req.json();
+    const {
+      text,
+      phenomenon,
+      topic,
+      notes,
+      target_duration = 60,
+      scene_count = 5,
+      animation_seconds = 0,
+      animation_count = 0,
+    } = await req.json();
 
     const apiKey = process.env.OPENROUTER_API_KEY || "";
     if (!apiKey) {
@@ -15,10 +24,21 @@ export async function POST(req: NextRequest) {
 
     const durationSec = Number(target_duration) || 60;
     const numScenes = Math.max(2, Math.min(10, Number(scene_count) || 5));
-    const totalWordsTarget = Math.round(durationSec * 2.9);
-    const wordsPerLaterScene = Math.round((totalWordsTarget - 14) / (numScenes - 1));
 
-    const promptUser = `${MASTER_PROMPT_ARTICLE_AND_VIDEO}
+    // Le prompt est calibré sur la durée, le nombre de scènes ET la durée des
+    // GIF animés fournis : sans cela l'IA produisait 165-175 mots fixes, trop
+    // peu pour commenter une animation de 30 s.
+    const masterPrompt = buildMasterPrompt({
+      targetDuration: durationSec,
+      sceneCount: numScenes,
+      animationSeconds: Number(animation_seconds) || 0,
+      animationCount: Number(animation_count) || 0,
+    });
+
+    const totalWordsTarget = Math.round(durationSec * 2.85);
+    const wordsPerLaterScene = Math.round((totalWordsTarget - 14) / Math.max(1, numScenes - 1));
+
+    const promptUser = `${masterPrompt}
 
 ==================================================
 DONNÉES TRANSMISES PAR L'UTILISATEUR :
@@ -28,7 +48,7 @@ TITRE / SUJET : ${topic || "Actualité météo"}
 ${notes ? `NOTES ET CHIFFRES : ${notes}\n` : ""}DURÉE VIDÉO CIBLÉE : ${durationSec} secondes (soit un total d'environ ${totalWordsTarget} mots pour les ${numScenes} scènes).
 - Scène 1 (Accroche) : STRICTEMENT <= 14 mots (durée <= 4 secondes).
 - Scènes 2 à ${numScenes} : environ ${wordsPerLaterScene} mots par scène.
-TEXTE / INFORMATIONS BRUTES DE L'ACTUALITÉ :
+${Number(animation_seconds) > 0 ? `- ANIMATIONS GIF FOURNIES : ${animation_count} fichier(s) totalisant environ ${Math.round(Number(animation_seconds))} s. Respecte impérativement le calibrage des GIF ci-dessus.\n` : ""}TEXTE / INFORMATIONS BRUTES DE L'ACTUALITÉ :
 ${text || notes || topic || phenomenon || "Épisode pluvieux et venteux avec nette dégradation par l'ouest."}
 
 RÉDIGE MAINTENANT L'ARTICLE WEB COMPLET (ENTRE === DEBUT ARTICLE === ET === FIN ARTICLE ===) ET LES ${numScenes} SCÈNES VIDÉO (CALIBRÉES POUR ${durationSec}s).

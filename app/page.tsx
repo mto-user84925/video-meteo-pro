@@ -32,6 +32,7 @@ import {
   ARTICLE_THEMES,
   MASTER_PROMPT_ARTICLE_AND_VIDEO,
   buildWordForWordArticleHtml,
+  buildMasterPrompt,
   detectBestArticleTheme,
   parseFullVideoScript,
   ParsedArticleOutput
@@ -637,13 +638,38 @@ export default function StudioMeteoPage() {
     notify("Studio réinitialisé avec succès.", "info");
   };
 
+  /**
+   * Estime la durée cumulée des GIF animés présents dans les scènes.
+   * Un GIF dure ≈ (nombre de blocs image) secondes pour nos cartes de
+   * prévision (1 image = 1 heure d'échéance). L'extension `.gif` suffit ici :
+   * le moteur Python mesure ensuite la durée réelle avec ffprobe.
+   */
+  const estimateAnimationSeconds = useCallback((): { seconds: number; count: number } => {
+    const gifScenes = scenes.filter(s => (s.file_url || "").toLowerCase().split("?")[0].endsWith(".gif"));
+    if (gifScenes.length === 0) return { seconds: 0, count: 0 };
+    // Sans métadonnées côté navigateur, on applique la durée moyenne constatée
+    // sur nos lots AROME (30 images ≈ 30 s).
+    const DEFAULT_GIF_SECONDS = 30;
+    return { seconds: gifScenes.length * DEFAULT_GIF_SECONDS, count: gifScenes.length };
+  }, [scenes]);
+
   const handleCopyMasterPrompt = async () => {
     try {
-      await navigator.clipboard.writeText(MASTER_PROMPT_ARTICLE_AND_VIDEO);
+      const anim = estimateAnimationSeconds();
+      const prompt = buildMasterPrompt({
+        targetDuration,
+        sceneCount: scenes.length,
+        animationSeconds: anim.seconds,
+        animationCount: anim.count
+      });
+      await navigator.clipboard.writeText(prompt);
       setPromptCopied(true);
       setTimeout(() => setPromptCopied(false), 3000);
-      addArticleLog("📋 Prompt Maître 2-en-1 copié dans le presse-papier ! Collez-le dans ChatGPT avec votre actualité.", "success");
-      notify("Prompt Maître 2-en-1 copié ! Collez-le dans ChatGPT.", "success");
+      const animInfo = anim.count > 0
+        ? ` (${anim.count} GIF ≈ ${Math.round(anim.seconds)}s d'animation pris en compte dans le calibrage)`
+        : "";
+      addArticleLog(`📋 Prompt Maître calibré sur ${targetDuration}s / ${scenes.length} scènes${animInfo} copié dans le presse-papier !`, "success");
+      notify(`Prompt Maître copié (${targetDuration}s, ${scenes.length} scènes) !`, "success");
     } catch {
       notify("Veuillez copier le texte du prompt manuellement.", "warning");
     }
@@ -679,6 +705,7 @@ export default function StudioMeteoPage() {
 
     try {
       addArticleLog("⏳ Rédaction journalistique en cours (titre SEO, chapeau, corps 500 mots, 5 scènes calibrées)...", "ia");
+      const animForPrompt = estimateAnimationSeconds();
       const res = await fetch("/api/generate-article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -688,7 +715,9 @@ export default function StudioMeteoPage() {
           topic,
           notes,
           target_duration: targetDuration,
-          scene_count: scenes.length
+          scene_count: scenes.length,
+          animation_seconds: animForPrompt.seconds,
+          animation_count: animForPrompt.count
         })
       });
       const data = await res.json();

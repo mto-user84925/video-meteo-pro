@@ -103,6 +103,114 @@ export function detectBestArticleTheme(text: string): ArticleTheme {
   return ARTICLE_THEMES[2]; // Dossier Pédagogique
 }
 
+/** Débit de la voix Charon, en mots par seconde (mesuré sur nos rendus). */
+export const WORDS_PER_SECOND = 2.85;
+
+export interface PromptCalibration {
+  /** Durée cible du bulletin, en secondes. */
+  targetDuration: number;
+  /** Nombre de scènes (3 à 6). */
+  sceneCount: number;
+  /** Durée cumulée des animations GIF fournies, en secondes (0 si aucune). */
+  animationSeconds: number;
+  /** Nombre de GIF animés détectés. */
+  animationCount: number;
+}
+
+export interface PromptBudget {
+  /** Mots visés au total. */
+  totalWords: number;
+  /** Fourchette autour de la cible. */
+  minWords: number;
+  maxWords: number;
+  /** Mots nécessaires pour commenter les animations. */
+  animationWords: number;
+  /** Durée que devra réellement faire le bulletin. */
+  effectiveDuration: number;
+  /** Section CALIBRAGE injectée dans le prompt. */
+  calibrageBlock: string;
+  /** Section CALIBRAGE DES GIF ANIMÉS injectée dans le prompt. */
+  gifBlock: string;
+}
+
+/**
+ * Calcule le budget de mots du prompt en tenant compte de la durée cible,
+ * du nombre de scènes ET de la durée des GIF animés.
+ *
+ * Problème corrigé : le prompt imposait « 165 à 175 mots » en dur. Avec un GIF
+ * de 30 s, la voix off ne couvrait pas l'animation et le spectateur ne voyait
+ * jamais la fin de la prévision. La garantie est désormais arithmétique.
+ */
+export function buildPromptBudget(input: PromptCalibration): PromptBudget {
+  const targetDuration = Math.max(10, Number(input.targetDuration) || 60);
+  const sceneCount = Math.min(12, Math.max(2, Number(input.sceneCount) || 5));
+  const animationSeconds = Math.max(0, Number(input.animationSeconds) || 0);
+  const animationCount = Math.max(0, Number(input.animationCount) || 0);
+
+  const baseWords = Math.round(targetDuration * WORDS_PER_SECOND);
+  const animationWords = Math.round(animationSeconds * WORDS_PER_SECOND);
+
+  // La voix doit couvrir la durée cible ET toutes les animations (le moteur
+  // réserve à chaque GIF sa durée complète).
+  const totalWords = Math.max(baseWords, animationWords + Math.round(8 * WORDS_PER_SECOND));
+  const effectiveDuration = totalWords / WORDS_PER_SECOND;
+
+  const minWords = Math.round(totalWords * 0.97);
+  const maxWords = Math.round(totalWords * 1.03);
+
+  const capShare = Math.round(effectiveDuration * 0.75);
+
+  const calibrageLines = [
+    `- Total des ${sceneCount} voix off : **${minWords} à ${maxWords} mots** (cible : ${totalWords} mots).`,
+    `- Durée visée : environ **${Math.round(effectiveDuration)} secondes**, selon le débit et les pauses de la voix.`,
+  ];
+  if (animationSeconds > 0) {
+    calibrageLines.push(
+      `- Dont **${animationWords} mots minimum réservés aux ${animationCount} animation(s) GIF** (elles totalisent ${Math.round(animationSeconds)} s).`
+    );
+  }
+  if (sceneCount !== 5) {
+    calibrageLines.push(
+      `- Le bulletin compte **${sceneCount} scènes** (et non cinq) : adapte la progression en conséquence.`
+    );
+  }
+
+  const gifBlock =
+    animationSeconds > 0
+      ? [
+          `## CALIBRAGE DES GIF ANIMÉS — RÈGLE IMPÉRATIVE`,
+          ``,
+          ``,
+          `Les GIF fournis totalisent **${Math.round(animationSeconds)} secondes d'animation**, soit environ **${animationWords} mots** de voix off nécessaires.`,
+          ``,
+          `Un GIF animé montre une **chronologie** : si la voix off est trop courte, l'animation défile trop vite ou est coupée, et le spectateur ne voit jamais la fin de la prévision. Pour chaque scène qui utilise un GIF :`,
+          ``,
+          `1. **Estime la durée de l'animation** à partir du nombre d'images qu'elle contient et de leur cadence (en moyenne **1 seconde par image** pour nos GIF de prévision).`,
+          `2. **Calcule la voix off nécessaire** : environ **${WORDS_PER_SECOND} mots par seconde d'animation**, plus 2 à 3 mots de respiration.`,
+          `3. **Indique explicitement cette estimation** dans le champ « Durée animation » de la scène.`,
+          `4. **Règle de capacité globale** : la somme des durées d'animation ne doit pas dépasser **75 % de la durée du bulletin** (soit environ **${capShare} secondes** ici). Si les GIF dépassent cette limite, choisis une autre carte fixe pour certaines scènes.`,
+          `5. Si un GIF dure **plus de 20 secondes**, réserve-lui l'essentiel d'une demi-durée et raccourcis fortement les scènes voisines.`,
+          `6. Un GIF ne doit **jamais** être accompagné d'une voix off plus courte que sa durée d'animation : mieux vaut couvrir moins d'échéances que survoler toute l'animation.`,
+          ``,
+          `Exemple de calcul à reproduire mentalement : un GIF de 30 images à 1 image par seconde dure 30 secondes ; il faut donc environ **${Math.round(30 * WORDS_PER_SECOND)} mots** de voix off (30 × ${WORDS_PER_SECOND}) pour le commenter intégralement.`,
+        ].join("\n")
+      : [
+          `## CALIBRAGE DES GIF ANIMÉS`,
+          ``,
+          `Aucun GIF animé n'est fourni pour ce bulletin : toutes les scènes utilisent des cartes fixes. Écris « Image fixe » dans le champ « Durée animation ».`,
+        ].join("\n");
+
+  return {
+    totalWords,
+    minWords,
+    maxWords,
+    animationWords,
+    effectiveDuration,
+    calibrageBlock: calibrageLines.join("\n"),
+    gifBlock,
+  };
+}
+
 export const MASTER_PROMPT_ARTICLE_AND_VIDEO = `# PROMPT MAÎTRE — ARTICLE WEB COMPLET + VIDÉO MÉTÉO EN 5 SCÈNES
 
 Tu es journaliste météo-climat senior, rédacteur SEO, vulgarisateur scientifique et directeur artistique broadcast pour **Météo-Climat Pro**.
@@ -311,8 +419,8 @@ Produis immédiatement les cinq scènes après l’article.
 
 ## CALIBRAGE
 
-- Total des cinq voix off : **165 à 175 mots**.
-- Durée visée : environ 60 secondes, selon le débit et les pauses de la voix.
+{{CALIBRAGE_BUDGET}}
+
 - Scène 1 : **8 à 14 mots**, avec une accroche immédiatement compréhensible.
 - Scènes 2 à 5 : répartir le reste pour former un commentaire continu et fluide.
 - Écrire tous les nombres en lettres dans les voix off.
@@ -320,18 +428,7 @@ Produis immédiatement les cinq scènes après l’article.
 - Ne pas lire les noms de modèles, les runs ou les échéances techniques sauf nécessité éditoriale.
 - Terminer la scène 5 par : **« et restez connectés avec METEO CLIMAT PRO. »**
 
-## CALIBRAGE DES GIF ANIMÉS — RÈGLE IMPÉRATIVE
-
-Un GIF animé montre une **chronologie** : si la voix off est trop courte, l’animation défile trop vite ou est coupée, et le spectateur ne voit jamais la fin de la prévision. Pour chaque scène qui utilise un GIF :
-
-1. **Estime la durée de l’animation** à partir du nombre d’images qu’elle contient et de leur cadence (en moyenne **1 seconde par image** pour nos GIF de prévision).
-2. **Calcule la voix off nécessaire** : environ **2,8 mots par seconde d’animation**, plus 2 à 3 mots de respiration.
-3. **Indique explicitement cette estimation** dans le champ « Durée animation » de la scène.
-4. **Règle de capacité globale** : la somme des durées d’animation ne doit pas dépasser **35 % du total des voix off**. Si les GIF fournis sont trop longs, choisis une autre carte fixe pour certaines scènes plutôt que de sacrifier le commentaire.
-5. Si un GIF dure **plus de 20 secondes**, réserve-lui l’essentiel d’une demi-durée et raccourcis fortement les scènes voisines.
-6. Un GIF ne doit **jamais** être accompagné d’une voix off plus courte que sa durée d’animation : mieux vaut couvrir moins d’échéances que survoler toute l’animation.
-
-Exemple de calcul à reproduire mentalement : un GIF de 30 images à 1 image par seconde dure 30 secondes ; il faut donc environ **84 mots** de voix off (30 × 2,8) pour le commenter intégralement.
+{{CALIBRAGE_GIF}}
 
 ## CONSTRUCTION
 
@@ -431,6 +528,35 @@ Si une scène échoue à la vérification, change le visuel ou reformule son con
 
 Si aucun texte n’est fourni, construis l’angle éditorial à partir des seules informations lisibles dans les fichiers. Ne déduis aucune observation, vigilance officielle, intensité horaire ou chronologie qui n’y figure pas.
 `;
+
+/**
+ * Assemble le prompt maître en injectant le budget de mots et la règle GIF
+ * calculés pour le bulletin en cours. Évite d'envoyer à l'IA un calibrage
+ * figé (165-175 mots pour 60 s) qui ne correspond ni à la durée choisie dans
+ * le studio, ni aux animations fournies.
+ */
+export function buildMasterPrompt(calibration?: Partial<PromptCalibration>): string {
+  const budget = buildPromptBudget({
+    targetDuration: calibration?.targetDuration ?? 60,
+    sceneCount: calibration?.sceneCount ?? 5,
+    animationSeconds: calibration?.animationSeconds ?? 0,
+    animationCount: calibration?.animationCount ?? 0,
+  });
+
+  return MASTER_PROMPT_ARTICLE_AND_VIDEO
+    .replace("{{CALIBRAGE_BUDGET}}", budget.calibrageBlock)
+    .replace("{{CALIBRAGE_GIF}}", budget.gifBlock)
+    .replace(
+      /8\. Les cinq voix off totalisent 165 à 175 mots et forment un commentaire continu\./,
+      `8. Les voix off totalisent ${budget.minWords} à ${budget.maxWords} mots et forment un commentaire continu.`
+    )
+    .replace(/8\. Les cinq voix off totalisent[^\n]*/,
+      `8. Les voix off totalisent ${budget.minWords} à ${budget.maxWords} mots et forment un commentaire continu.`)
+    .replace(
+      /# PROMPT MAÎTRE — ARTICLE WEB COMPLET \+ VIDÉO MÉTÉO EN 5 SCÈNES/,
+      `# PROMPT MAÎTRE — ARTICLE WEB COMPLET + VIDÉO MÉTÉO EN ${calibration?.sceneCount ?? 5} SCÈNES`
+    );
+}
 
 function isMostlyUppercase(str: string): boolean {
   const letters = str.replace(/[^a-zA-ZÀ-ÿ]/g, "");
@@ -604,6 +730,7 @@ export function buildWordForWordArticleHtml(
 ): ParsedArticleOutput | null {
   // 1. Extraire les scènes complètes du script vidéo (LIVRABLE 2)
   const parsedVideoScenes = parseFullVideoScript(rawText);
+  const sceneCount = parsedVideoScenes.length || 5;
 
   function getVoiceoverForImage(
     imgNum: number,
@@ -745,6 +872,12 @@ export function buildWordForWordArticleHtml(
       .replace(/(?:^|\n)\s*(?:\*\*)?(?:PARAGRAPHE|DESCRIPTION)\s+PARTAGE(?:\*\*)?\s*:\s*[^\n]+/gi, "")
       .replace(/(?:^|\n)\s*(?:\*\*)?HASHTAGS?(?:\*\*)?\s*:\s*[^\n]+/gi, "")
       .trim();
+  }
+
+  // Le texte du LIVRABLE 2 peut mentionner « cinq scènes » même lorsque le
+  // studio en demande un autre nombre : on aligne la formulation.
+  if (sceneCount !== 5) {
+    articleBlock = articleBlock.replace(/cinq scènes/gi, `${sceneCount} scènes`);
   }
 
   const lines = articleBlock.split(/\r?\n/);
