@@ -360,6 +360,15 @@ def rebalance_for_animations(scene_durs, gif_durs, voice_dur):
     if not gif_durs or all(d <= 0 for d in gif_durs):
         return scene_durs, []
 
+    # Défense : une liste de durées plus longue que le nombre de scènes
+    # faisait planter l'indexation (IndexError). On la recadre sur la taille
+    # réelle, et on complète par des zéros si elle est trop courte.
+    gif_durs = list(gif_durs)
+    if len(gif_durs) > len(scene_durs):
+        gif_durs = gif_durs[: len(scene_durs)]
+    while len(gif_durs) < len(scene_durs):
+        gif_durs.append(0.0)
+
     warnings = []
     adjusted = list(scene_durs)
 
@@ -483,9 +492,13 @@ def render(job_file):
         is_gif = local_file.lower().endswith(".gif")
 
         # Durée réelle de l'animation (0.0 pour une image fixe).
+        # BUG corrigé : `gif_durs` est déjà dimensionné à une case par scène ;
+        # un `.append()` décalait les index (liste de 10 éléments pour 5 scènes)
+        # et provoquait un IndexError juste après la préparation des scènes,
+        # bloquant la régie à 45 %.
         if is_gif:
-            gif_durs.append(media_duration(local_file))
-            if gif_durs[-1] <= 0:
+            gif_durs[idx] = media_duration(local_file)
+            if gif_durs[idx] <= 0:
                 print(f"⚠️ Durée du GIF scène {idx + 1} illisible : traité comme une image fixe.")
 
         # Cadrages broadcast multi-angles si une seule image est fournie
