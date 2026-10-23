@@ -234,17 +234,19 @@ Règles du fichier :
 
 ## IMAGE DE COUVERTURE — À GÉNÉRER
 
-En plus du fichier texte, **génère une image de couverture** et propose-la en téléchargement séparé :
+En plus du fichier texte, **génère une image de couverture** et propose-la en téléchargement séparé.
 
+Le sujet de l’image est **obligatoirement** celui décrit dans le champ **COUVERTURE IMAGE** plus haut : reprends le phénomène, la zone et l’accroche qui y figurent. Ne produis jamais une image générique ou neutre.
+
+- **Une image uniquement** : pas de planche contact, pas de vignettes multiples, pas de collage, pas de comparaison avant/après.
 - **Format paysage 16:9** (obligatoire, jamais carré ni vertical).
-- Illustration éditoriale : ciel, nuages, pluie ou vent selon le phénomène, atmosphère dramatique mais crédible.
+- Illustration éditoriale cohérente avec le phénomène décrit : ciel de tempête, rideau de pluie, rafales sur le littoral, brume hivernale… Atmosphère dramatique mais crédible.
 - **Palette bleu marine profond et accents or dorés**, éclairage cinématographique, rendu broadcast télévision.
-- **Le titre de l’actualité est incrusté dans l’image**, en bas à gauche, en capitales blanches très lisibles. Le sous-titre peut être ajouté en dessous, en plus petit et en doré.
+- **L’accroche du champ COUVERTURE IMAGE est incrustée dans l’image**, en bas à gauche, en capitales blanches très lisibles. Le nom du phénomène peut être ajouté en dessous, en plus petit et en doré.
 - Le tiers inférieur gauche reste sombre et dégagé pour que le texte soit parfaitement lisible.
-- **Aucun logo, aucun filigrane, aucun texte autre que le titre et le sous-titre.** Aucune carte géographique détaillée, aucun chiffre de prévision inventé.
-- Le sujet de l’image doit reprendre la description donnée dans le champ **COUVERTURE IMAGE** ci-dessus.
+- **Aucun logo, aucun filigrane, aucun texte autre que l’accroche et le nom du phénomène.** Aucune carte géographique détaillée, aucun chiffre de prévision inventé.
 
-Si la génération d’image n’est pas disponible, indique-le en une phrase : l’image pourra être produite plus tard depuis le studio à partir de la description COUVERTURE IMAGE.
+Si la génération d’image n’est pas disponible, indique-le en une phrase : l’image pourra être produite plus tard à partir de la description COUVERTURE IMAGE.
 
 ---
 
@@ -441,7 +443,11 @@ CATEGORIE : [Choisir : Actualités Météo / Analyses Climatologiques / Vigilanc
 
 **Sources :** [Mentionner uniquement les modèles réellement exploités et les documents fournis, sans nom de média externe. Ne pas inventer d’observations ou d’Observatoire.] Analyse : Météo-Climat Pro.
 
-COUVERTURE IMAGE : [Décris en une phrase l’image de couverture 16:9 à produire pour cette actualité : élément principal visible (carte, zone géographique, phénomène), couleurs dominantes aux teintes Météo-Climat Pro (marine et or), et une accroche textuelle de 4 à 7 mots en majuscules. Cette description sert à générer l’image de couverture.]
+**BLOC DE PARTAGE RÉSEAUX SOCIAUX — OBLIGATOIRE**
+
+Les six lignes ci-dessous doivent **toutes** figurer à la fin de l’article, dans cet ordre. Chacune est rédigée pour **cette actualité précise** : reprends le nom du phénomène, les zones concernées, la période et les valeurs chiffrées réellement disponibles. **Aucune formule générique, aucun texte passe-partout.**
+
+COUVERTURE IMAGE : [Une seule phrase qui décrit le CONTENU de l’image de couverture à produire : l’élément météorologique principal visible (ciel de tempête, rideau de pluie, rafales sur la côte…), la zone concernée, et les 4 à 7 mots d’accroche en majuscules qui devront être inscrits sur l’image. N’indique ni dimensions, ni couleurs, ni consignes techniques : le style visuel est défini plus bas.]
 
 TITRE PARTAGE : [Titre court et percutant pour les réseaux sociaux, 60 à 90 caractères, sans point final. Il peut différer du titre SEO, mais doit rester factuel et respecter les règles de fiabilité.]
 
@@ -449,13 +455,13 @@ PARAGRAPHE PARTAGE : [Un seul paragraphe de 40 à 60 mots, rédigé pour un fil 
 
 HASHTAGS : [#meteo #previsions #[Phénomène] #France #MeteoClimatPro — 5 à 8 hashtags en un seul espace, sans accent dans les hashtags, sans espace à l’intérieur d’un hashtag.]
 
-POST FACEBOOK : [Une seule ligne de 120 à 200 caractères maximum, ton grand public, phrases courtes, 1 emoji pertinent maximum, terminée par un appel à l’action invitant à lire l’article. Pas de hashtags dans cette ligne : ils sont ajoutés séparément.]
+POST FACEBOOK : [Ligne de 120 à 200 caractères pour Facebook. Commence par l’annonce concrète de CE bulletin (phénomène + zone + échéance). Ton grand public, phrases courtes, 1 emoji pertinent maximum, termine par un appel à lire l’article. Pas de hashtag dans cette ligne. Exemple de forme attendue : « 🌪️ Cinq nouveaux départements passent en vigilance orange ce soir. Rafales jusqu’à 140 km/h attendues vendredi sur les côtes. Détails dans notre article. »]
 
-POST LINKEDIN : [Une seule ligne de 200 à 300 caractères, ton professionnel et factuel, orienté analyse et enjeux (impacts, anticipation, prévention), sans emoji. Aucun hashtag dans cette ligne.]
+POST LINKEDIN : [Ligne de 200 à 300 caractères pour LinkedIn. Ton professionnel et factuel, centré sur l’analyse et les enjeux concrets de CE bulletin : impacts sur les chantiers, la circulation, les équipes terrain, l’anticipation à prévoir. Aucun emoji, aucun hashtag dans cette ligne. Pas de formule creuse : cite la zone et l’échéance concernées.]
 
-POST TIKTOK : [Une seule ligne de 60 à 120 caractères, très directe et rythmée, 1 à 2 emojis, formule d’accroche immédiate adaptée au format vertical. Pas de hashtag dans cette ligne.]
+POST TIKTOK : [Ligne de 60 à 120 caractères pour TikTok. Accroche immédiate sur CE bulletin : le chiffre marquant ou la zone la plus exposée dès les premiers mots, 1 à 2 emojis, rythme parlé adapté au format vertical. Pas de hashtag dans cette ligne.]
 
-POST TWITTER : [Un tweet de 180 à 240 caractères maximum (comprenant l’espace nécessaire aux hashtags ci-dessous), ton informatif et direct, 1 emoji maximum, sans hashtag dans cette ligne.]
+POST TWITTER : [Tweet de 180 à 240 caractères pour X/Twitter. Informatif et direct, reprend le chiffre clé et la zone de CE bulletin, 1 emoji maximum, sans hashtag dans cette ligne. Prévois la place nécessaire aux 2 à 3 hashtags ajoutés ci-dessous.]
 
 HASHTAGS FACEBOOK : [#meteo #previsions #[Phénomène] #France — 3 à 5 hashtags maximum, sans accent.]
 
@@ -520,7 +526,10 @@ Effectue ces vérifications sans afficher de rapport :
 10. Aucun champ entre crochets ne reste dans le résultat.
 11. Le bloc de partage est présent à la fin de l’article, dans cet ordre exact : COUVERTURE IMAGE, TITRE PARTAGE, PARAGRAPHE PARTAGE, HASHTAGS, POST FACEBOOK, POST LINKEDIN, POST TIKTOK, POST TWITTER, HASHTAGS FACEBOOK, HASHTAGS LINKEDIN, HASHTAGS TIKTOK, HASHTAGS TWITTER.
 12. Tous les hashtags sont sans accent, séparés par un seul espace, et adaptés à leur plateforme (aucun hashtag dans les lignes POST).
-13. Les longueurs des POST respectent les limites indiquées (Facebook 120-200, LinkedIn 200-300, TikTok 60-120 caractères).
+13. Les longueurs des POST respectent les limites indiquées (Facebook 120-200, LinkedIn 200-300, TikTok 60-120, Twitter 180-240 caractères).
+14. **Les quatre POST citent explicitement le phénomène, la zone et une valeur chiffrée tirée de CETTE actualité.** Aucun ne pourrait convenir à un autre bulletin.
+15. Le champ COUVERTURE IMAGE décrit un sujet concret (phénomène + zone + accroche) et non un thème vague.
+16. L’image de couverture générée reprend bien ce sujet : une seule illustration, en paysage, avec l’accroche incrustée.
 
 Si une scène échoue à la vérification, change le visuel ou reformule son contenu avant de livrer.
 
