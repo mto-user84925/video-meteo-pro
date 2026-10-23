@@ -232,6 +232,20 @@ Règles du fichier :
 - Ne mets **aucun commentaire, aucune explication et aucune phrase d’introduction** dans le fichier : uniquement les livrables.
 - Si la production d’un fichier n’est pas possible, écris l’intégralité du contenu dans le chat, dans le même format, sans rien abréger.
 
+## IMAGE DE COUVERTURE — À GÉNÉRER
+
+En plus du fichier texte, **génère une image de couverture** et propose-la en téléchargement séparé :
+
+- **Format paysage 16:9** (obligatoire, jamais carré ni vertical).
+- Illustration éditoriale : ciel, nuages, pluie ou vent selon le phénomène, atmosphère dramatique mais crédible.
+- **Palette bleu marine profond et accents or dorés**, éclairage cinématographique, rendu broadcast télévision.
+- **Le titre de l’actualité est incrusté dans l’image**, en bas à gauche, en capitales blanches très lisibles. Le sous-titre peut être ajouté en dessous, en plus petit et en doré.
+- Le tiers inférieur gauche reste sombre et dégagé pour que le texte soit parfaitement lisible.
+- **Aucun logo, aucun filigrane, aucun texte autre que le titre et le sous-titre.** Aucune carte géographique détaillée, aucun chiffre de prévision inventé.
+- Le sujet de l’image doit reprendre la description donnée dans le champ **COUVERTURE IMAGE** ci-dessus.
+
+Si la génération d’image n’est pas disponible, indique-le en une phrase : l’image pourra être produite plus tard depuis le studio à partir de la description COUVERTURE IMAGE.
+
 ---
 
 ## 1. FIABILITÉ ET SIGNATURE

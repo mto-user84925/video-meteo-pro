@@ -382,9 +382,7 @@ export default function StudioMeteoPage() {
   const [editSocialTitle, setEditSocialTitle] = useState("");
   const [editSocialDescription, setEditSocialDescription] = useState("");
   const [editHashtags, setEditHashtags] = useState("");
-  // Couverture générée par IA + posts par plateforme
-  const [coverPrompt, setCoverPrompt] = useState("");
-  const [generatingCover, setGeneratingCover] = useState(false);
+  // Posts par plateforme (Facebook / LinkedIn / TikTok / Twitter)
   const [editFacebookPost, setEditFacebookPost] = useState("");
   const [editLinkedinPost, setEditLinkedinPost] = useState("");
   const [editTiktokPost, setEditTiktokPost] = useState("");
@@ -403,7 +401,6 @@ export default function StudioMeteoPage() {
     setEditSocialTitle(article.socialTitle || "");
     setEditSocialDescription(article.socialDescription || "");
     setEditHashtags(article.hashtags || "");
-    setCoverPrompt(article.coverPrompt || "");
     setEditFacebookPost(article.facebookPost || "");
     setEditLinkedinPost(article.linkedinPost || "");
     setEditTiktokPost(article.tiktokPost || "");
@@ -698,56 +695,6 @@ export default function StudioMeteoPage() {
       const msg = e instanceof Error ? e.message : "Lecture impossible";
       addArticleLog(`❌ ${msg}`, "error");
       notify(msg, "error");
-    }
-  };
-
-  /**
-   * Génère l'image de couverture 16:9 par IA (OpenRouter) puis la place
-   * directement comme photo de couverture du bulletin.
-   */
-  const handleGenerateCover = async () => {
-    const titleForCover = editTitle.trim() || parsedArticle?.title || topic;
-    if (!titleForCover) {
-      notify("Aucun article chargé : collez d'abord le texte ou importez le fichier .txt.", "warning");
-      return;
-    }
-    setGeneratingCover(true);
-    addArticleLog("🎨 Génération de l'image de couverture 16:9 (IA)...", "images");
-    try {
-      const res = await fetch("/api/generate-cover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: coverPrompt,
-          title: titleForCover,
-          subtitle: effectivePhenomenon,
-          category: editCategory,
-          session_id: sessionId || `cover_${Date.now()}`,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Génération impossible");
-
-      setCoverImageUrl(data.url);
-      setCoverImageName(`Couverture IA (${data.model})`);
-      const dimInfo = data.width && data.height ? ` — ${data.width}×${data.height}` : "";
-      addArticleLog(
-        `✅ Couverture générée (${data.model}${dimInfo}, ${Math.round(data.size / 1024)} Ko) et définie comme photo de couverture.`,
-        "success"
-      );
-      if (data.orientation && data.orientation !== "paysage") {
-        addArticleLog(
-          `⚠️ L'image générée est en ${data.orientation} : vérifiez le cadrage avant publication.`,
-          "info"
-        );
-      }
-      notify("🎨 Couverture générée et appliquée !", "success");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Erreur de génération";
-      addArticleLog(`❌ ${msg}`, "error");
-      notify(msg, "error");
-    } finally {
-      setGeneratingCover(false);
     }
   };
 
@@ -2935,50 +2882,6 @@ export default function StudioMeteoPage() {
                             placeholder="#meteo #previsions #France #MeteoClimatPro"
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-400"
                           />
-                        </div>
-
-                        {/* COUVERTURE GÉNÉRÉE PAR IA */}
-                        <div className="border-t border-slate-800 pt-3 space-y-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-fuchsia-400">
-                            🖼️ Image de couverture 16:9
-                          </span>
-                          <textarea
-                            rows={2}
-                            value={coverPrompt}
-                            onChange={e => setCoverPrompt(e.target.value)}
-                            placeholder="Description de la couverture (remplie depuis le prompt maître)"
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-400"
-                          />
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={handleGenerateCover}
-                              disabled={generatingCover}
-                              className="px-3 py-2 rounded-lg bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                              title="Générer une illustration de couverture paysage 16:9, titre inclus, prête pour l'outil de publication"
-                            >
-                              {generatingCover ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                              {generatingCover ? "Génération..." : "🎨 Générer la couverture (paysage 16:9)"}
-                            </button>
-                            {coverImageUrl && coverImageUrl.includes("/renders/") && coverImageUrl.includes("couverture_") && (
-                              <a
-                                href={coverImageUrl}
-                                download="COUVERTURE_METEO.png"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-bold flex items-center gap-1.5"
-                              >
-                                <Download className="w-3.5 h-3.5" /> Télécharger
-                              </a>
-                            )}
-                          </div>
-                          {coverImageUrl && coverImageUrl.includes("couverture_") && (
-                            <img
-                              src={coverImageUrl}
-                              alt="Couverture générée"
-                              className="w-full max-h-40 object-cover rounded-lg border border-fuchsia-500/40 mt-1"
-                            />
-                          )}
                         </div>
 
                         {/* POSTS PAR PLATEFORME */}
