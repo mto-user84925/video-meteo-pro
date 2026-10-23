@@ -33,10 +33,12 @@ import {
   MASTER_PROMPT_ARTICLE_AND_VIDEO,
   buildWordForWordArticleHtml,
   buildMasterPrompt,
+  buildPromptBudget,
   detectBestArticleTheme,
   parseFullVideoScript,
   ParsedArticleOutput
 } from "./lib/articleFormatter";
+import { MASTER_PROMPT_V2 } from "./lib/masterPromptV2";
 import {
   ArticleBlock,
   buildArticleBlocks,
@@ -700,21 +702,39 @@ export default function StudioMeteoPage() {
 
   const handleCopyMasterPrompt = async () => {
     try {
+      // Le prompt V2 est fourni par l'utilisateur et repris tel quel : les
+      // publications sociales sont désormais affichées dans le CHAT ChatGPT,
+      // pas dans le fichier .txt. Le calibrage dynamique (durée, scènes, GIF)
+      // reste appliqué en remplaçant les valeurs fixes du bloc CALIBRAGE.
       const anim = estimateAnimationSeconds();
-      const prompt = buildMasterPrompt({
+      const budget = buildPromptBudget({
         targetDuration,
         sceneCount: scenes.length,
         animationSeconds: anim.seconds,
-        animationCount: anim.count
+        animationCount: anim.count,
       });
+      const prompt = MASTER_PROMPT_V2
+        .replace(
+          /- Total des 5 voix off : \*\*166 à 176 mots\*\* \(cible : 171 mots\)\./,
+          `- Total des ${scenes.length} voix off : **${budget.minWords} à ${budget.maxWords} mots** (cible : ${budget.totalWords} mots).`
+        )
+        .replace(
+          /- Durée visée : environ \*\*60 secondes\*\*/,
+          `- Durée visée : environ **${Math.round(budget.effectiveDuration)} secondes**`
+        )
+        .replace(
+          /8\. Les 5 voix off totalisent 166 à 176 mots/,
+          `8. Les ${scenes.length} voix off totalisent ${budget.minWords} à ${budget.maxWords} mots`
+        );
+
       await navigator.clipboard.writeText(prompt);
       setPromptCopied(true);
       setTimeout(() => setPromptCopied(false), 3000);
       const animInfo = anim.count > 0
-        ? ` (${anim.count} GIF ≈ ${Math.round(anim.seconds)}s d'animation pris en compte dans le calibrage)`
+        ? ` (${anim.count} GIF ≈ ${Math.round(anim.seconds)}s pris en compte)`
         : "";
-      addArticleLog(`📋 Prompt Maître calibré sur ${targetDuration}s / ${scenes.length} scènes${animInfo} copié dans le presse-papier !`, "success");
-      notify(`Prompt Maître copié (${targetDuration}s, ${scenes.length} scènes) !`, "success");
+      addArticleLog(`📋 Prompt Maître V2 copié : ${targetDuration}s / ${scenes.length} scènes${animInfo}. Les posts sociaux seront dans le CHAT.`, "success");
+      notify(`Prompt Maître V2 copié (${targetDuration}s, ${scenes.length} scènes) !`, "success");
     } catch {
       notify("Veuillez copier le texte du prompt manuellement.", "warning");
     }
