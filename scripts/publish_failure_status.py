@@ -29,7 +29,10 @@ def main() -> int:
 
     session_id = (args.session_id or "").strip()
     url = os.environ.get("SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_KEY", "")
+    # Écriture Storage réservée au service_role depuis le durcissement RLS :
+    # avec la seule clé publishable, POST et PUT renvoyaient HTTP 400 et le site
+    # restait bloqué sur « encodage en cours » après un échec du workflow.
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("SUPABASE_KEY", "")
 
     if not session_id:
         print("publish_failure_status : aucun session_id, rien à publier.", file=sys.stderr)

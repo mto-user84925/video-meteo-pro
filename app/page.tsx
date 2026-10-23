@@ -58,7 +58,7 @@ interface LogEntry {
   id: string;
   time: string;
   text: string;
-  type: 'info' | 'voice' | 'video' | 'audio' | 'success';
+  type: 'info' | 'voice' | 'video' | 'audio' | 'success' | 'error';
 }
 
 interface ArticleLogEntry {
@@ -557,6 +557,10 @@ export default function StudioMeteoPage() {
   // Régie Vidéo & Rendu
   const [generatingScript, setGeneratingScript] = useState(false);
   const [rendering, setRendering] = useState(false);
+  // Intervalles de la régie (polling) : conservés en refs pour pouvoir
+  // stopper l'attente depuis le bouton « Arrêter l'attente ».
+  const renderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const renderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [renderStatus, setRenderStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [progressStep, setProgressStep] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -1994,6 +1998,26 @@ export default function StudioMeteoPage() {
     notify(`Scène ${indexToRemove + 1} supprimée.`, "info");
   };
 
+  /** Débloque l'interface sans attendre la fin du rendu cloud. */
+  const handleStopRender = () => {
+    if (renderTimerRef.current) clearInterval(renderTimerRef.current);
+    if (renderPollRef.current) clearInterval(renderPollRef.current);
+    renderTimerRef.current = null;
+    renderPollRef.current = null;
+    setRendering(false);
+    setRenderStatus('error');
+    setLogs(prev => [
+      ...prev,
+      {
+        id: `stop_${Date.now()}`,
+        time: new Date().toLocaleTimeString("fr-FR", { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        text: "⏹️ Attente interrompue. Le rendu cloud peut continuer : relancez plus tard ou reprenez l'édition.",
+        type: "info"
+      }
+    ]);
+    notify("Attente arrêtée. Vous pouvez relancer le rendu.", "info");
+  };
+
   // Lancement du rendu double format
   const handleStartRender = async () => {
     const missing = scenes.find(s => !s.file_url);
@@ -2049,12 +2073,12 @@ export default function StudioMeteoPage() {
       if (!res.ok) throw new Error("Erreur de dispatch");
 
       let lastProgressTs = 0;
-      const timerInterval = setInterval(() => {
+      const timerInterval = (renderTimerRef.current = setInterval(() => {
         setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
-      }, 1000);
+      }, 1000));
 
       let attempts = 0;
-      const statusInterval = setInterval(async () => {
+      const statusInterval = (renderPollRef.current = setInterval(async () => {
         attempts++;
         try {
           const stRes = await fetch(`/api/status?session_id=${sId}`);
@@ -2074,6 +2098,30 @@ export default function StudioMeteoPage() {
               setRendering(false);
               setProgressStep("Rendu terminé avec succès !");
               notify("🎉 Vos 2 vidéos (TikTok 9:16 + Paysage 16:9) sont prêtes !", "success");
+              } else if (stData.status === "failed") {
+                // Un rendu en échec laissait auparavant le site attendre
+                // 15 minutes sans message : seul « completed » était traité.
+                clearInterval(timerInterval);
+                clearInterval(statusInterval);
+                const reason = stData.message || stData.step || "Le rendu a échoué côté serveur.";
+                setLogs(prev => [
+                  ...prev,
+                  { id: `fail_${Date.now()}`, time: getNowStr(), text: `❌ Rendu en échec : ${reason}`, type: "error" }
+                ]);
+                setRenderStatus('error');
+                setRendering(false);
+                setProgressStep("Rendu en échec");
+                notify(`Rendu en échec : ${reason}`, "error");
+            } else if (stData.status === "unknown") {
+                clearInterval(timerInterval);
+                clearInterval(statusInterval);
+                setLogs(prev => [
+                  ...prev,
+                  { id: `unk_${Date.now()}`, time: getNowStr(), text: "❌ Aucun job trouvé pour cette session. Relancez le rendu.", type: "error" }
+                ]);
+                setRenderStatus('error');
+                setRendering(false);
+                notify("Aucun job trouvé pour cette session.", "error");
             } else if (stData.progress && stData.progress.ts !== lastProgressTs) {
               lastProgressTs = stData.progress.ts;
               setLogs(prev => [...prev, { id: `p_${stData.progress.ts}`, time: getNowStr(), text: stData.progress.text, type: (stData.progress.type || "info") as any }]);
@@ -2092,7 +2140,7 @@ export default function StudioMeteoPage() {
           setRenderStatus('error');
           notify("Le rendu a pris plus de temps que prévu. Veuillez vérifier la console.", "warning");
         }
-      }, 2500);
+      }, 2500));
 
     } catch (e: any) {
       setRenderStatus('error');
@@ -2643,12 +2691,12 @@ export default function StudioMeteoPage() {
                 <div key={log.id} className="flex items-start gap-2 leading-relaxed">
                   <span className="text-slate-500 flex-shrink-0 select-none">[{log.time}]</span>
                   <span className={
+                    log.type === 'error' ? 'text-rose-400 font-bold' :
                     log.type === 'success' ? 'text-emerald-400 font-bold' :
                     log.type === 'ia' ? 'text-purple-300 font-semibold' :
                     log.type === 'theme' ? 'text-sky-300' :
                     log.type === 'images' ? 'text-amber-300' :
                     log.type === 'publish' ? 'text-teal-300 font-semibold' :
-                    log.type === 'error' ? 'text-rose-400 font-bold' :
                     'text-slate-300'
                   }>
                     {log.text}
@@ -3220,14 +3268,33 @@ export default function StudioMeteoPage() {
 
         {/* 🎬 ÉTAPE 3 : BOUTON DE LANCEMENT DE LA RÉGIE VIDÉO */}
         <section className="text-center py-4">
-          <button
-            onClick={handleStartRender}
-            disabled={rendering}
-            className="w-full md:w-auto px-8 py-4 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-black text-lg rounded-2xl shadow-2xl shadow-sky-500/25 transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-3 mx-auto"
-          >
-            {rendering ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Play className="w-6 h-6 fill-current" />}
-            {rendering ? "Régie vidéo en cours d'encodage..." : "🎬 Générer les 2 Vidéos (TikTok 9:16 + Paysage 16:9)"}
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={handleStartRender}
+              disabled={rendering}
+              className="px-8 py-4 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-black text-lg rounded-2xl shadow-2xl shadow-sky-500/25 transition-all transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-3"
+            >
+              {rendering ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Play className="w-6 h-6 fill-current" />}
+              {rendering ? "Régie vidéo en cours d'encodage..." : "🎬 Générer les 2 Vidéos (TikTok 9:16 + Paysage 16:9)"}
+            </button>
+
+            {rendering && (
+              <button
+                type="button"
+                onClick={handleStopRender}
+                className="px-5 py-4 bg-rose-600/90 hover:bg-rose-500 text-white font-black text-sm rounded-2xl shadow-lg shadow-rose-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                title="Arrêter d'attendre et revenir à l'édition (le rendu cloud peut continuer côté serveur)"
+              >
+                <X className="w-5 h-5" />
+                Arrêter l'attente
+              </button>
+            )}
+          </div>
+          {rendering && (
+            <p className="text-[11px] text-slate-500 mt-2">
+              Bloqué ? « Arrêter l'attente » débloque l'interface : vous pouvez relancer ou reprendre l'édition.
+            </p>
+          )}
 
           {/* JOURNAL DE LOGS EN DIRECT (CONSOLE RÉGIE BROADCAST) */}
           {(rendering || logs.length > 0) && (
@@ -3309,6 +3376,7 @@ export default function StudioMeteoPage() {
                   <div key={log.id} className="flex items-start gap-2 leading-relaxed">
                     <span className="text-slate-500 flex-shrink-0 select-none">[{log.time}]</span>
                     <span className={
+                      log.type === 'error' ? 'text-rose-400 font-bold' :
                       log.type === 'success' ? 'text-emerald-400 font-bold' :
                       log.type === 'voice' ? 'text-amber-300' :
                       log.type === 'video' ? 'text-sky-300' :
