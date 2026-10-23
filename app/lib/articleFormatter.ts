@@ -234,9 +234,11 @@ Règles du fichier :
 
 ## IMAGE DE COUVERTURE — À GÉNÉRER
 
-En plus du fichier texte, **génère une image de couverture** et propose-la en téléchargement séparé.
+En plus du fichier texte, **génère une et une seule image de couverture** et propose-la en téléchargement séparé.
 
-Le sujet de l’image est **obligatoirement** celui décrit dans le champ **COUVERTURE IMAGE** plus haut : reprends le phénomène, la zone et l’accroche qui y figurent. Ne produis jamais une image générique ou neutre.
+**NOMBRE STRICTEMENT LIMITÉ À UNE IMAGE.** Quelle que soit la longueur de l’article, tu ne produis qu’une seule illustration de couverture. N’en génère pas une seconde à la fin de ta réponse, ni une variante, ni une version alternative, ni un test. Si tu as déjà proposé l’image plus haut dans la conversation, ne la régénère pas : indique simplement qu’elle est prête.
+
+Le sujet de l’image est **obligatoirement** celui décrit dans le champ **COUVERTURE IMAGE** plus haut : reprends le phénomène, la zone et l’accroche qui y figurent. Ne produis jamais une image générique, neutre ou vide.
 
 - **Une image uniquement** : pas de planche contact, pas de vignettes multiples, pas de collage, pas de comparaison avant/après.
 - **Format paysage 16:9** (obligatoire, jamais carré ni vertical).
@@ -530,6 +532,7 @@ Effectue ces vérifications sans afficher de rapport :
 14. **Les quatre POST citent explicitement le phénomène, la zone et une valeur chiffrée tirée de CETTE actualité.** Aucun ne pourrait convenir à un autre bulletin.
 15. Le champ COUVERTURE IMAGE décrit un sujet concret (phénomène + zone + accroche) et non un thème vague.
 16. L’image de couverture générée reprend bien ce sujet : une seule illustration, en paysage, avec l’accroche incrustée.
+17. **Une seule image a été générée au total.** Aucune seconde image, aucune variante, aucun test en fin de réponse.
 
 Si une scène échoue à la vérification, change le visuel ou reformule son contenu avant de livrer.
 
