@@ -228,7 +228,7 @@ Enregistre l’intégralité de ta réponse (article + balises === DEBUT/FIN ART
 
 Règles du fichier :
 - Encodage **UTF-8**, texte brut, **aucun bloc de code markdown** autour du contenu.
-- Conserve exactement les libellés et séparateurs attendus : TITRE SEO :, CHAPEAU :, CATEGORIE :, === DEBUT ARTICLE ===, === FIN ARTICLE ===, TITRE PARTAGE :, PARAGRAPHE PARTAGE :, HASHTAGS :, SCÈNE N, puis les champs « - Image à utiliser : », « - Badge : », « - Titre : », « - Sous-titre : », « - Localisation : », « - Bandeau Infos Météo : » et « Voix off Charon : ».
+- Conserve exactement les libellés et séparateurs attendus : TITRE SEO :, CHAPEAU :, CATEGORIE :, === DEBUT ARTICLE ===, === FIN ARTICLE ===, COUVERTURE IMAGE :, TITRE PARTAGE :, PARAGRAPHE PARTAGE :, HASHTAGS :, POST FACEBOOK :, POST LINKEDIN :, POST TIKTOK :, POST TWITTER :, HASHTAGS FACEBOOK :, HASHTAGS LINKEDIN :, HASHTAGS TIKTOK :, HASHTAGS TWITTER :, SCÈNE N, puis les champs « - Image à utiliser : », « - Badge : », « - Titre : », « - Sous-titre : », « - Localisation : », « - Bandeau Infos Météo : » et « Voix off Charon : ».
 - Ne mets **aucun commentaire, aucune explication et aucune phrase d’introduction** dans le fichier : uniquement les livrables.
 - Si la production d’un fichier n’est pas possible, écris l’intégralité du contenu dans le chat, dans le même format, sans rien abréger.
 
@@ -427,11 +427,29 @@ CATEGORIE : [Choisir : Actualités Météo / Analyses Climatologiques / Vigilanc
 
 **Sources :** [Mentionner uniquement les modèles réellement exploités et les documents fournis, sans nom de média externe. Ne pas inventer d’observations ou d’Observatoire.] Analyse : Météo-Climat Pro.
 
+COUVERTURE IMAGE : [Décris en une phrase l’image de couverture 16:9 à produire pour cette actualité : élément principal visible (carte, zone géographique, phénomène), couleurs dominantes aux teintes Météo-Climat Pro (marine et or), et une accroche textuelle de 4 à 7 mots en majuscules. Cette description sert à générer l’image de couverture.]
+
 TITRE PARTAGE : [Titre court et percutant pour les réseaux sociaux, 60 à 90 caractères, sans point final. Il peut différer du titre SEO, mais doit rester factuel et respecter les règles de fiabilité.]
 
 PARAGRAPHE PARTAGE : [Un seul paragraphe de 40 à 60 mots, rédigé pour un fil social : il résume l’enjeu principal, la zone et la période, et se termine de façon à donner envie de lire l’article. Aucun emoji obligatoire, aucun chiffre non étayé.]
 
 HASHTAGS : [#meteo #previsions #[Phénomène] #France #MeteoClimatPro — 5 à 8 hashtags en un seul espace, sans accent dans les hashtags, sans espace à l’intérieur d’un hashtag.]
+
+POST FACEBOOK : [Une seule ligne de 120 à 200 caractères maximum, ton grand public, phrases courtes, 1 emoji pertinent maximum, terminée par un appel à l’action invitant à lire l’article. Pas de hashtags dans cette ligne : ils sont ajoutés séparément.]
+
+POST LINKEDIN : [Une seule ligne de 200 à 300 caractères, ton professionnel et factuel, orienté analyse et enjeux (impacts, anticipation, prévention), sans emoji. Aucun hashtag dans cette ligne.]
+
+POST TIKTOK : [Une seule ligne de 60 à 120 caractères, très directe et rythmée, 1 à 2 emojis, formule d’accroche immédiate adaptée au format vertical. Pas de hashtag dans cette ligne.]
+
+POST TWITTER : [Un tweet de 180 à 240 caractères maximum (comprenant l’espace nécessaire aux hashtags ci-dessous), ton informatif et direct, 1 emoji maximum, sans hashtag dans cette ligne.]
+
+HASHTAGS FACEBOOK : [#meteo #previsions #[Phénomène] #France — 3 à 5 hashtags maximum, sans accent.]
+
+HASHTAGS LINKEDIN : [#meteo #climat #[Phénomène] #prevention — 3 à 5 hashtags professionnels, sans accent.]
+
+HASHTAGS TIKTOK : [#meteo #meteotiktok #fyp #[Phénomène] #[Région] — 4 à 6 hashtags, sans accent, sans espace à l’intérieur d’un hashtag.]
+
+HASHTAGS TWITTER : [#meteo #[Phénomène] #France — 2 à 3 hashtags courts, sans accent.]
 
 === FIN ARTICLE ===
 
@@ -486,8 +504,9 @@ Effectue ces vérifications sans afficher de rapport :
 8. Les {{SCENE_COUNT}} voix off totalisent 165 à 175 mots et forment un commentaire continu.
 9. Les titres vidéo ne dépassent pas 32 caractères.
 10. Aucun champ entre crochets ne reste dans le résultat.
-11. Le bloc TITRE PARTAGE / PARAGRAPHE PARTAGE / HASHTAGS est présent à la fin de l’article, dans cet ordre.
-12. Les hashtags sont sans accent et séparés par un seul espace.
+11. Le bloc de partage est présent à la fin de l’article, dans cet ordre exact : COUVERTURE IMAGE, TITRE PARTAGE, PARAGRAPHE PARTAGE, HASHTAGS, POST FACEBOOK, POST LINKEDIN, POST TIKTOK, POST TWITTER, HASHTAGS FACEBOOK, HASHTAGS LINKEDIN, HASHTAGS TIKTOK, HASHTAGS TWITTER.
+12. Tous les hashtags sont sans accent, séparés par un seul espace, et adaptés à leur plateforme (aucun hashtag dans les lignes POST).
+13. Les longueurs des POST respectent les limites indiquées (Facebook 120-200, LinkedIn 200-300, TikTok 60-120 caractères).
 
 Si une scène échoue à la vérification, change le visuel ou reformule son contenu avant de livrer.
 
@@ -615,6 +634,22 @@ export interface ParsedArticleOutput {
   socialDescription?: string;
   /** Hashtags prêts à publier (HASHTAGS). */
   hashtags?: string;
+  /** Description de l'image de couverture à produire (COUVERTURE IMAGE). */
+  coverPrompt?: string;
+  /** Ligne de post Facebook (POST FACEBOOK). */
+  facebookPost?: string;
+  /** Ligne de post LinkedIn (POST LINKEDIN). */
+  linkedinPost?: string;
+  /** Ligne de post TikTok (POST TIKTOK). */
+  tiktokPost?: string;
+  /** Hashtags spécifiques par plateforme. */
+  facebookHashtags?: string;
+  linkedinHashtags?: string;
+  tiktokHashtags?: string;
+  /** Ligne de post Twitter/X (POST TWITTER). */
+  twitterPost?: string;
+  /** Hashtags spécifiques Twitter/X. */
+  twitterHashtags?: string;
 }
 
 /**
@@ -960,11 +995,25 @@ export function buildWordForWordArticleHtml(
   articleBlock = articleBlock.replace(/===\s*(?:DEBUT|FIN)\s*ARTICLE\s*===/gi, "").trim();
   if (!articleBlock || articleBlock.length < 30) return null;
 
-  // Bloc de partage réseaux sociaux (TITRE PARTAGE / PARAGRAPHE PARTAGE /
-  // HASHTAGS). Il est EXTRUIT du corps : sans cela, ces trois lignes brutes
-  // (« TITRE PARTAGE : … », « HASHTAGS : #… ») se retrouvaient publiées en
-  // clair au bas de l'article sur les sites.
-  const social = { socialTitle: "", socialDescription: "", hashtags: "" };
+  // Bloc de partage réseaux sociaux (couverture, titre, paragraphe, hashtags,
+  // posts Facebook/LinkedIn/TikTok et leurs hashtags dédiés).
+  // Il est EXTRAIT du corps : sans cela, ces lignes brutes (« TITRE PARTAGE :
+  // … », « HASHTAGS : #… ») se retrouvaient publiées en clair au bas de
+  // l'article sur les sites.
+  const social = {
+    coverPrompt: "",
+    socialTitle: "",
+    socialDescription: "",
+    hashtags: "",
+    facebookPost: "",
+    linkedinPost: "",
+    tiktokPost: "",
+    facebookHashtags: "",
+    linkedinHashtags: "",
+    tiktokHashtags: "",
+    twitterPost: "",
+    twitterHashtags: "",
+  };
   {
     // Le bloc de partage peut se trouver après « === FIN ARTICLE === »
     // (cas fréquent des réponses ChatGPT) : on cherche dans TOUT le texte,
@@ -973,11 +1022,33 @@ export function buildWordForWordArticleHtml(
       const m = rawText.match(re) || articleBlock.match(re);
       return m ? m[1].replace(/\*\*/g, "").replace(/^["«]|["»]$/g, "").trim() : "";
     };
-    social.socialTitle = grab(/(?:^|\n)\s*(?:\*\*)?TITRE\s+PARTAGE(?:\*\*)?\s*:\s*([^\n]+)/i);
-    social.socialDescription = grab(/(?:^|\n)\s*(?:\*\*)?(?:PARAGRAPHE|DESCRIPTION)\s+PARTAGE(?:\*\*)?\s*:\s*([^\n]+)/i);
+    const line = (label: string) =>
+      new RegExp(`(?:^|\\n)\\s*(?:\\*\\*)?${label}(?:\\*\\*)?\\s*:\\s*([^\\n]+)`, "i");
+
+    social.coverPrompt = grab(line("COUVERTURE\\s+IMAGE"));
+    social.socialTitle = grab(line("TITRE\\s+PARTAGE"));
+    social.socialDescription = grab(line("(?:PARAGRAPHE|DESCRIPTION)\\s+PARTAGE"));
+
+    // Hashtags : on distingue les variantes par plateforme AVANT la générique,
+    // sinon « HASHTAGS FACEBOOK : » serait capté par « HASHTAGS : ».
+    social.facebookHashtags = grab(line("HASHTAGS\\s+FACEBOOK"));
+    social.linkedinHashtags = grab(line("HASHTAGS\\s+LINKEDIN"));
+    social.tiktokHashtags = grab(line("HASHTAGS\\s+TIKTOK"));
+    social.twitterHashtags = grab(line("HASHTAGS\\s+(?:TWITTER|X)"));
     social.hashtags = grab(/(?:^|\n)\s*(?:\*\*)?HASHTAGS?(?:\*\*)?\s*:\s*([^\n]+)/i);
 
+    social.facebookPost = grab(line("POST\\s+FACEBOOK"));
+    social.linkedinPost = grab(line("POST\\s+LINKEDIN"));
+    social.tiktokPost = grab(line("POST\\s+TIKTOK"));
+    social.twitterPost = grab(line("POST\\s+(?:TWITTER|X)"));
+
+    // Lignes de plateforme retirées en premier : elles commencent par
+    // « HASHTAGS FACEBOOK : » et seraient sinon partiellement retirées par la
+    // règle générique « HASHTAGS : ».
     articleBlock = articleBlock
+      .replace(/(?:^|\n)\s*(?:\*\*)?COUVERTURE\s+IMAGE(?:\*\*)?\s*:\s*[^\n]+/gi, "")
+      .replace(/(?:^|\n)\s*(?:\*\*)?HASHTAGS\s+(?:FACEBOOK|LINKEDIN|TIKTOK)(?:\*\*)?\s*:\s*[^\n]+/gi, "")
+      .replace(/(?:^|\n)\s*(?:\*\*)?POST\s+(?:FACEBOOK|LINKEDIN|TIKTOK)(?:\*\*)?\s*:\s*[^\n]+/gi, "")
       .replace(/(?:^|\n)\s*(?:\*\*)?TITRE\s+PARTAGE(?:\*\*)?\s*:\s*[^\n]+/gi, "")
       .replace(/(?:^|\n)\s*(?:\*\*)?(?:PARAGRAPHE|DESCRIPTION)\s+PARTAGE(?:\*\*)?\s*:\s*[^\n]+/gi, "")
       .replace(/(?:^|\n)\s*(?:\*\*)?HASHTAGS?(?:\*\*)?\s*:\s*[^\n]+/gi, "")
@@ -1702,6 +1773,15 @@ export function buildWordForWordArticleHtml(
     htmlDark: htmlParts.join("\n"),
     socialTitle: social.socialTitle,
     socialDescription: social.socialDescription,
-    hashtags: social.hashtags
+    hashtags: social.hashtags,
+    coverPrompt: social.coverPrompt,
+    facebookPost: social.facebookPost,
+    linkedinPost: social.linkedinPost,
+    tiktokPost: social.tiktokPost,
+    facebookHashtags: social.facebookHashtags,
+    linkedinHashtags: social.linkedinHashtags,
+    tiktokHashtags: social.tiktokHashtags,
+    twitterPost: social.twitterPost,
+    twitterHashtags: social.twitterHashtags
   };
 }

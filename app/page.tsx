@@ -382,6 +382,17 @@ export default function StudioMeteoPage() {
   const [editSocialTitle, setEditSocialTitle] = useState("");
   const [editSocialDescription, setEditSocialDescription] = useState("");
   const [editHashtags, setEditHashtags] = useState("");
+  // Couverture générée par IA + posts par plateforme
+  const [coverPrompt, setCoverPrompt] = useState("");
+  const [generatingCover, setGeneratingCover] = useState(false);
+  const [editFacebookPost, setEditFacebookPost] = useState("");
+  const [editLinkedinPost, setEditLinkedinPost] = useState("");
+  const [editTiktokPost, setEditTiktokPost] = useState("");
+  const [editFacebookHashtags, setEditFacebookHashtags] = useState("");
+  const [editLinkedinHashtags, setEditLinkedinHashtags] = useState("");
+  const [editTiktokHashtags, setEditTiktokHashtags] = useState("");
+  const [editTwitterPost, setEditTwitterPost] = useState("");
+  const [editTwitterHashtags, setEditTwitterHashtags] = useState("");
 
   /** Charge l'article parsé dans l'éditeur (à chaque nouveau parse / changement de thème). */
   const hydrateEditor = useCallback((article: ParsedArticleOutput) => {
@@ -392,6 +403,15 @@ export default function StudioMeteoPage() {
     setEditSocialTitle(article.socialTitle || "");
     setEditSocialDescription(article.socialDescription || "");
     setEditHashtags(article.hashtags || "");
+    setCoverPrompt(article.coverPrompt || "");
+    setEditFacebookPost(article.facebookPost || "");
+    setEditLinkedinPost(article.linkedinPost || "");
+    setEditTiktokPost(article.tiktokPost || "");
+    setEditFacebookHashtags(article.facebookHashtags || "");
+    setEditLinkedinHashtags(article.linkedinHashtags || "");
+    setEditTiktokHashtags(article.tiktokHashtags || "");
+    setEditTwitterPost(article.twitterPost || "");
+    setEditTwitterHashtags(article.twitterHashtags || "");
     setEditBlocks(buildArticleBlocks(article.htmlDark));
     setEditHistory([]);
   }, []);
@@ -678,6 +698,56 @@ export default function StudioMeteoPage() {
       const msg = e instanceof Error ? e.message : "Lecture impossible";
       addArticleLog(`❌ ${msg}`, "error");
       notify(msg, "error");
+    }
+  };
+
+  /**
+   * Génère l'image de couverture 16:9 par IA (OpenRouter) puis la place
+   * directement comme photo de couverture du bulletin.
+   */
+  const handleGenerateCover = async () => {
+    const titleForCover = editTitle.trim() || parsedArticle?.title || topic;
+    if (!titleForCover) {
+      notify("Aucun article chargé : collez d'abord le texte ou importez le fichier .txt.", "warning");
+      return;
+    }
+    setGeneratingCover(true);
+    addArticleLog("🎨 Génération de l'image de couverture 16:9 (IA)...", "images");
+    try {
+      const res = await fetch("/api/generate-cover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: coverPrompt,
+          title: titleForCover,
+          subtitle: effectivePhenomenon,
+          category: editCategory,
+          session_id: sessionId || `cover_${Date.now()}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Génération impossible");
+
+      setCoverImageUrl(data.url);
+      setCoverImageName(`Couverture IA (${data.model})`);
+      const dimInfo = data.width && data.height ? ` — ${data.width}×${data.height}` : "";
+      addArticleLog(
+        `✅ Couverture générée (${data.model}${dimInfo}, ${Math.round(data.size / 1024)} Ko) et définie comme photo de couverture.`,
+        "success"
+      );
+      if (data.orientation && data.orientation !== "paysage") {
+        addArticleLog(
+          `⚠️ L'image générée est en ${data.orientation} : vérifiez le cadrage avant publication.`,
+          "info"
+        );
+      }
+      notify("🎨 Couverture générée et appliquée !", "success");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erreur de génération";
+      addArticleLog(`❌ ${msg}`, "error");
+      notify(msg, "error");
+    } finally {
+      setGeneratingCover(false);
     }
   };
 
@@ -2865,6 +2935,101 @@ export default function StudioMeteoPage() {
                             placeholder="#meteo #previsions #France #MeteoClimatPro"
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-400"
                           />
+                        </div>
+
+                        {/* COUVERTURE GÉNÉRÉE PAR IA */}
+                        <div className="border-t border-slate-800 pt-3 space-y-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-fuchsia-400">
+                            🖼️ Image de couverture 16:9
+                          </span>
+                          <textarea
+                            rows={2}
+                            value={coverPrompt}
+                            onChange={e => setCoverPrompt(e.target.value)}
+                            placeholder="Description de la couverture (remplie depuis le prompt maître)"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-400"
+                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleGenerateCover}
+                              disabled={generatingCover}
+                              className="px-3 py-2 rounded-lg bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              title="Générer une illustration de couverture paysage 16:9, titre inclus, prête pour l'outil de publication"
+                            >
+                              {generatingCover ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                              {generatingCover ? "Génération..." : "🎨 Générer la couverture (paysage 16:9)"}
+                            </button>
+                            {coverImageUrl && coverImageUrl.includes("/renders/") && coverImageUrl.includes("couverture_") && (
+                              <a
+                                href={coverImageUrl}
+                                download="COUVERTURE_METEO.png"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-bold flex items-center gap-1.5"
+                              >
+                                <Download className="w-3.5 h-3.5" /> Télécharger
+                              </a>
+                            )}
+                          </div>
+                          {coverImageUrl && coverImageUrl.includes("couverture_") && (
+                            <img
+                              src={coverImageUrl}
+                              alt="Couverture générée"
+                              className="w-full max-h-40 object-cover rounded-lg border border-fuchsia-500/40 mt-1"
+                            />
+                          )}
+                        </div>
+
+                        {/* POSTS PAR PLATEFORME */}
+                        <div className="border-t border-slate-800 pt-3 space-y-3">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                            📣 Posts prêts à publier
+                          </span>
+                          {([
+                            { label: "Facebook", post: editFacebookPost, setPost: setEditFacebookPost, tags: editFacebookHashtags, setTags: setEditFacebookHashtags, color: "text-blue-400", max: 200 },
+                            { label: "LinkedIn", post: editLinkedinPost, setPost: setEditLinkedinPost, tags: editLinkedinHashtags, setTags: setEditLinkedinHashtags, color: "text-sky-400", max: 300 },
+                            { label: "TikTok", post: editTiktokPost, setPost: setEditTiktokPost, tags: editTiktokHashtags, setTags: setEditTiktokHashtags, color: "text-rose-400", max: 120 },
+                            { label: "Twitter / X", post: editTwitterPost, setPost: setEditTwitterPost, tags: editTwitterHashtags, setTags: setEditTwitterHashtags, color: "text-slate-300", max: 280 },
+                          ] as const).map(({ label, post, setPost, tags, setTags, color, max }) => (
+                            <div key={label} className="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className={`text-[10px] font-black uppercase tracking-wider ${color}`}>{label}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-[10px] font-mono ${post.length > max ? "text-rose-400 font-bold" : "text-slate-500"}`}>
+                                    {post.length}/{max}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const payload = [post, tags].filter(Boolean).join("\n\n");
+                                      if (payload) {
+                                        navigator.clipboard.writeText(payload);
+                                        notify(`Post ${label} copié !`, "success");
+                                      }
+                                    }}
+                                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                                    title={`Copier le post ${label} + ses hashtags`}
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                              <textarea
+                                rows={2}
+                                value={post}
+                                onChange={e => setPost(e.target.value)}
+                                placeholder={`Post ${label} (rempli depuis le prompt maître)`}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-400"
+                              />
+                              <input
+                                value={tags}
+                                onChange={e => setTags(e.target.value)}
+                                placeholder={`#hashtags ${label}`}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[10px] font-mono text-sky-300 focus:outline-none focus:border-emerald-400"
+                              />
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
