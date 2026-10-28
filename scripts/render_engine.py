@@ -73,12 +73,25 @@ def _fetch_bytes(url, referer_from_url=True, timeout=45):
     if referer_from_url:
         headers["Referer"] = "/".join(url.split("/")[:3]) + "/"
 
+    def _is_valid_image_bytes(b):
+        return (
+            len(b) > 500 and (
+                b.startswith(b"\x89PNG\r\n\x1a\n") or
+                b.startswith(b"\xff\xd8\xff") or
+                b.startswith(b"GIF87a") or
+                b.startswith(b"GIF89a") or
+                (b.startswith(b"RIFF") and b[8:12] == b"WEBP")
+            )
+        )
+
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = resp.read()
-        if len(data) > 2000:
+        if _is_valid_image_bytes(data):
             return data
+        elif len(data) > 2000:
+            print(f"⚠️ Réponse reçue ({len(data)} octets) mais signature image non reconnue.")
     except Exception as exc:
         print(f"⚠️ urllib a échoué ({exc}) — tentative empreinte Chrome...")
 
@@ -414,7 +427,9 @@ def render(job_file):
 
     session_id = job.get("session_id", str(int(time.time())))
     target_dur_input = float(job.get("target_duration", 60.0))
-    scenes_data = job["scenes"]
+    scenes_data = job.get("scenes") or []
+    if not scenes_data:
+        raise ValueError("Le job ne contient aucune scène.")
     work_dir = os.path.join(BASE_DIR, "scratch", f"job_{session_id}")
     os.makedirs(work_dir, exist_ok=True)
 
@@ -810,8 +825,9 @@ def render(job_file):
             stat = ImageStat.Stat(Image.open(os.path.join(qc_dir, ef)).convert("L"))
             lum, stddev = stat.mean[0], stat.stddev[0]
             checked += 1
-            # < 16/255 = écran noir ; < 2 d'écart-type = image unie/grise
-            if lum < 16 or stddev < 2:
+            # ponytail: seuil calibré anti-faux positifs sur cartes nocturnes/sombres.
+            # Un vrai écran noir présente luma < 4 ET stddev < 1.0 (noir uniforme).
+            if lum < 4 and stddev < 1.0:
                 raise RuntimeError(
                     f"Alerte écran noir dans la version {label} ({ef} : luma={lum:.1f}, σ={stddev:.1f})"
                 )

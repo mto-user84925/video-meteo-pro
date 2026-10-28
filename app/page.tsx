@@ -622,15 +622,7 @@ export default function StudioMeteoPage() {
     ]);
   };
 
-  // ponytail: Nettoyage systématique des timers de polling au démontage
-  useEffect(() => {
-    return () => {
-      if (renderTimerRef.current) clearInterval(renderTimerRef.current);
-      if (renderPollRef.current) clearInterval(renderPollRef.current);
-    };
-  }, []);
-
-  const handleResetAll = () => {
+  const handleResetAll = useCallback((silent: boolean | React.MouseEvent = false) => {
     setArticleUrl("");
     setManualPromptText("");
     setTopic("");
@@ -648,6 +640,14 @@ export default function StudioMeteoPage() {
     setEditSocialTitle("");
     setEditSocialDescription("");
     setEditHashtags("");
+    setEditFacebookPost("");
+    setEditLinkedinPost("");
+    setEditTiktokPost("");
+    setEditFacebookHashtags("");
+    setEditLinkedinHashtags("");
+    setEditTiktokHashtags("");
+    setEditTwitterPost("");
+    setEditTwitterHashtags("");
     setCoverImageUrl("");
     setCoverImageName("");
     setBatchUploadedImages([]);
@@ -661,8 +661,76 @@ export default function StudioMeteoPage() {
     setArticleActionStatus('idle');
     setRenderStatus('idle');
     setSessionId(null);
-    notify("Studio réinitialisé avec succès.", "info");
-  };
+    setPhenomenon(PHENOMENONS[0]);
+    setCustomPhenomenon("");
+    setIsCustomPhenomenon(false);
+    setTargetDuration(60);
+    setSelectedThemeId("auto");
+    setAutoDetectedBadge(null);
+    setPromptCopied(false);
+
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage?.clear();
+        window.sessionStorage?.clear();
+      }
+    } catch {}
+
+    if (silent !== true) {
+      notify("Studio réinitialisé avec succès.", "info");
+    }
+  }, []);
+
+  // 🧹 SUPPRESSION SYSTÉMATIQUE DU CACHE ET RÉINITIALISATION TOTALE À CHAQUE OUVERTURE DU SITE
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        // 1. Purge intégrale de tout stockage local navigateur
+        window.localStorage?.clear();
+        window.sessionStorage?.clear();
+
+        // 2. Vider les caches CacheStorage du navigateur
+        if ("caches" in window) {
+          caches.keys().then((names) => {
+            names.forEach((name) => caches.delete(name));
+          }).catch(() => {});
+        }
+
+        // 3. Désenregistrer d'éventuels Service Workers résiduels
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            registrations.forEach((r) => r.unregister());
+          }).catch(() => {});
+        }
+
+        // 4. Vider les valeurs de formulaires restaurées par le navigateur (bfcache / session restore)
+        document.querySelectorAll<HTMLTextAreaElement | HTMLInputElement>(
+          "textarea, input[type='text'], input[type='url']"
+        ).forEach((el) => {
+          el.value = "";
+        });
+      }
+    } catch {}
+
+    // 5. Réinitialisation complète de tous les états (zéro voix off mémorisée, scènes vierges)
+    handleResetAll(true);
+
+    // 6. Écouter également l'événement pageshow pour vider si l'utilisateur revient en arrière
+    const handlePageShow = (e: PageTransitionEvent) => {
+      try {
+        window.localStorage?.clear();
+        window.sessionStorage?.clear();
+      } catch {}
+      handleResetAll(true);
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      if (renderTimerRef.current) clearInterval(renderTimerRef.current);
+      if (renderPollRef.current) clearInterval(renderPollRef.current);
+    };
+  }, [handleResetAll]);
 
   /**
    * Estime la durée cumulée des GIF animés présents dans les scènes.
@@ -1123,18 +1191,18 @@ export default function StudioMeteoPage() {
           );
         }
       } else if (art) {
-        // Auto-création des scènes broadcast si ChatGPT s'est arrêté à la fin de l'article
+        // Auto-création des scènes broadcast si ChatGPT s'est arrêté à la fin de l'article (zéro texte en dur, dérivé de l'article)
         const usedUrls = new Set<string>();
         const autoScenes: Scene[] = [
           {
             scene_number: 1,
-            badge: "CHANGEMENT MÉTÉO",
+            badge: (art.category || "ACTUALITÉ MÉTÉO").slice(0, 24).toUpperCase(),
             badge_color: BADGE_PRESETS[0].color,
-            title: (art.title || "PLUIE ET VENT EN VUE").slice(0, 32).toUpperCase(),
-            sub: "RETOUR DES PERTURBATIONS",
-            location_tag: "FRANCE / NORD",
-            ticker: (art.excerpt || "Retour des perturbations océaniques.").slice(0, 75),
-            script_text: "Attention, changement météo en vue avec le retour des pluies et du vent !",
+            title: (art.title || "BULLETIN MÉTÉO").slice(0, 32).toUpperCase(),
+            sub: (art.category || "PRÉVISIONS").slice(0, 32).toUpperCase(),
+            location_tag: "FRANCE",
+            ticker: (art.excerpt || art.title || "").slice(0, 75),
+            script_text: (art.excerpt || art.title || "").slice(0, 160),
             file_url: existingImagesByRef[1]?.url || "",
             file_name: existingImagesByRef[1]?.name || "",
             image_ref: 1
@@ -1143,11 +1211,11 @@ export default function StudioMeteoPage() {
             scene_number: 2,
             badge: "ANALYSE SYNOPTIQUE",
             badge_color: BADGE_PRESETS[1].color,
-            title: "FLUX OCÉANIQUE ACTIF",
-            sub: "RECUL DE L'ANTICYCLONE",
-            location_tag: "ATLANTIQUE NORD",
-            ticker: "Vaste creux dépressionnaire atlantique repoussant l'anticyclone.",
-            script_text: "En altitude, les dépressions atlantiques repoussent l'anticyclone et ouvrent la voie aux perturbations.",
+            title: "SITUATION GÉNÉRALE",
+            sub: "MODÉLISATION NUMÉRIQUE",
+            location_tag: "FRANCE & EUROPE",
+            ticker: (art.excerpt || "").slice(0, 75),
+            script_text: "",
             file_url: existingImagesByRef[2]?.url || "",
             file_name: existingImagesByRef[2]?.name || "",
             image_ref: 2
@@ -1156,24 +1224,24 @@ export default function StudioMeteoPage() {
             scene_number: 3,
             badge: "CHRONOLOGIE",
             badge_color: BADGE_PRESETS[2].color,
-            title: "DÉGRADATION PROGRESSIVE",
-            sub: "DE MERCREDI À VENDREDI",
-            location_tag: "OUEST PUIS NORD",
-            ticker: "Les pluies gagnent la Bretagne et la Normandie avant de traverser le pays.",
-            script_text: "Les premières pluies touchent l'ouest dès mercredi, avant de s'étendre au nord et au centre jeudi et vendredi.",
+            title: "ÉVOLUTION PRÉVUE",
+            sub: "PROCHAINES 48 HEURES",
+            location_tag: "RÉGIONS CONCERNÉES",
+            ticker: "Suivi météorologique haute résolution.",
+            script_text: "",
             file_url: existingImagesByRef[3]?.url || existingImagesByRef[1]?.url || "",
             file_name: existingImagesByRef[3]?.name || existingImagesByRef[1]?.name || "",
             image_ref: 3
           },
           {
             scene_number: 4,
-            badge: "RISQUE VENTEUX",
+            badge: "POINTS D'ATTENTION",
             badge_color: BADGE_PRESETS[3].color,
-            title: "COUP DE VENT EN VUE",
-            sub: "VENDREDI SOUS SURVEILLANCE",
-            location_tag: "MANCHE / LITTORAL",
-            ticker: "Rafales à plus de 100 km/h en mer et 80 km/h dans les terres possibles.",
-            script_text: "Un risque de coup de vent est envisagé vendredi, avec de fortes rafales près des côtes et dans les terres.",
+            title: "IMPACTS & RISQUES",
+            sub: "ZONES SOUS VIGILANCE",
+            location_tag: "SECTEURS EXPOSÉS",
+            ticker: "Prudence sur les chantiers et réseaux routiers.",
+            script_text: "",
             file_url: existingImagesByRef[2]?.url || existingImagesByRef[1]?.url || "",
             file_name: existingImagesByRef[2]?.name || existingImagesByRef[1]?.name || "",
             image_ref: 2
@@ -1185,8 +1253,8 @@ export default function StudioMeteoPage() {
             title: "ÉVOLUTION À SUIVRE",
             sub: "BULLETINS ACTUALISÉS",
             location_tag: "TOUTES RÉGIONS",
-            ticker: "Restez connectés avec nos prévisions réactualisées.",
-            script_text: "Adaptez vos déplacements et activités extérieures, et restez connectés avec METEO CLIMAT PRO.",
+            ticker: "Restez connectés avec METEO CLIMAT PRO.",
+            script_text: "Restez informés de l'évolution avec METEO CLIMAT PRO.",
             file_url: "",
             file_name: "",
             image_ref: 5
@@ -1491,17 +1559,18 @@ export default function StudioMeteoPage() {
       }
 
       if (art) {
+        // Auto-création des scènes broadcast si aucun bloc SCÈNE explicite (zéro texte en dur, dérivé de l'article)
         const usedUrls = new Set<string>();
         const autoScenes: Scene[] = [
           {
             scene_number: 1,
-            badge: "CHANGEMENT MÉTÉO",
+            badge: (art.category || "ACTUALITÉ MÉTÉO").slice(0, 24).toUpperCase(),
             badge_color: BADGE_PRESETS[0].color,
-            title: (art.title || "PLUIE ET VENT EN VUE").slice(0, 32).toUpperCase(),
-            sub: "RETOUR DES PERTURBATIONS",
-            location_tag: "FRANCE / NORD",
-            ticker: (art.excerpt || "Retour des perturbations océaniques.").slice(0, 75),
-            script_text: "Attention, changement météo en vue avec le retour des pluies et du vent !",
+            title: (art.title || "BULLETIN MÉTÉO").slice(0, 32).toUpperCase(),
+            sub: (art.category || "PRÉVISIONS").slice(0, 32).toUpperCase(),
+            location_tag: "FRANCE",
+            ticker: (art.excerpt || art.title || "").slice(0, 75),
+            script_text: (art.excerpt || art.title || "").slice(0, 160),
             file_url: existingImagesByRef[1]?.url || "",
             file_name: existingImagesByRef[1]?.name || "",
             image_ref: 1
@@ -1510,11 +1579,11 @@ export default function StudioMeteoPage() {
             scene_number: 2,
             badge: "ANALYSE SYNOPTIQUE",
             badge_color: BADGE_PRESETS[1].color,
-            title: "FLUX OCÉANIQUE ACTIF",
-            sub: "RECUL DE L'ANTICYCLONE",
-            location_tag: "ATLANTIQUE NORD",
-            ticker: "Vaste creux dépressionnaire atlantique repoussant l'anticyclone.",
-            script_text: "En altitude, les dépressions atlantiques repoussent l'anticyclone et ouvrent la voie aux perturbations.",
+            title: "SITUATION GÉNÉRALE",
+            sub: "MODÉLISATION NUMÉRIQUE",
+            location_tag: "FRANCE & EUROPE",
+            ticker: (art.excerpt || "").slice(0, 75),
+            script_text: "",
             file_url: existingImagesByRef[2]?.url || "",
             file_name: existingImagesByRef[2]?.name || "",
             image_ref: 2
@@ -1523,24 +1592,24 @@ export default function StudioMeteoPage() {
             scene_number: 3,
             badge: "CHRONOLOGIE",
             badge_color: BADGE_PRESETS[2].color,
-            title: "DÉGRADATION PROGRESSIVE",
-            sub: "DE MERCREDI À VENDREDI",
-            location_tag: "OUEST PUIS NORD",
-            ticker: "Les pluies gagnent la Bretagne et la Normandie avant de traverser le pays.",
-            script_text: "Les premières pluies touchent l'ouest dès mercredi, avant de s'étendre au nord et au centre jeudi et vendredi.",
+            title: "ÉVOLUTION PRÉVUE",
+            sub: "PROCHAINES 48 HEURES",
+            location_tag: "RÉGIONS CONCERNÉES",
+            ticker: "Suivi météorologique haute résolution.",
+            script_text: "",
             file_url: existingImagesByRef[3]?.url || existingImagesByRef[1]?.url || "",
             file_name: existingImagesByRef[3]?.name || existingImagesByRef[1]?.name || "",
             image_ref: 3
           },
           {
             scene_number: 4,
-            badge: "RISQUE VENTEUX",
+            badge: "POINTS D'ATTENTION",
             badge_color: BADGE_PRESETS[3].color,
-            title: "COUP DE VENT EN VUE",
-            sub: "VENDREDI SOUS SURVEILLANCE",
-            location_tag: "MANCHE / LITTORAL",
-            ticker: "Rafales à plus de 100 km/h en mer et 80 km/h dans les terres possibles.",
-            script_text: "Un risque de coup de vent est envisagé vendredi, avec de fortes rafales près des côtes et dans les terres.",
+            title: "IMPACTS & RISQUES",
+            sub: "ZONES SOUS VIGILANCE",
+            location_tag: "SECTEURS EXPOSÉS",
+            ticker: "Prudence sur les chantiers et réseaux routiers.",
+            script_text: "",
             file_url: existingImagesByRef[2]?.url || existingImagesByRef[1]?.url || "",
             file_name: existingImagesByRef[2]?.name || existingImagesByRef[1]?.name || "",
             image_ref: 2
@@ -1552,8 +1621,8 @@ export default function StudioMeteoPage() {
             title: "ÉVOLUTION À SUIVRE",
             sub: "BULLETINS ACTUALISÉS",
             location_tag: "TOUTES RÉGIONS",
-            ticker: "Restez connectés avec nos prévisions réactualisées.",
-            script_text: "Adaptez vos déplacements et activités extérieures, et restez connectés avec METEO CLIMAT PRO.",
+            ticker: "Restez connectés avec METEO CLIMAT PRO.",
+            script_text: "Restez informés de l'évolution avec METEO CLIMAT PRO.",
             file_url: "",
             file_name: "",
             image_ref: 5
@@ -2023,11 +2092,11 @@ export default function StudioMeteoPage() {
       scene_number: nextNum,
       badge: "ÉVOLUTION DU PHÉNOMÈNE",
       badge_color: [30, 120, 240],
-      title: `SCÈNE ${nextNum}`,
-      sub: "Précisions et évolution météo",
+      title: "",
+      sub: "",
       location_tag: "FRANCE",
-      ticker: "Suivi météorologique en direct • Météo-Climat Pro",
-      script_text: "Décrivez ici les conditions météorologiques ou prévisions détaillées pour cette scène.",
+      ticker: "",
+      script_text: "",
       file_url: "",
       file_name: ""
     };
@@ -2234,7 +2303,7 @@ export default function StudioMeteoPage() {
           </div>
           <button
             type="button"
-            onClick={handleResetAll}
+            onClick={() => handleResetAll(false)}
             className="self-start md:self-center px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-950/80 text-slate-200 hover:text-rose-200 border border-slate-700 hover:border-rose-500/40 text-xs font-bold flex items-center gap-2 transition shadow-lg shrink-0 cursor-pointer"
             title="Vider le cache et remettre toutes les scènes à zéro"
           >
@@ -2329,6 +2398,8 @@ export default function StudioMeteoPage() {
                     type="text"
                     placeholder="Phénomène personnalisé..."
                     value={customPhenomenon}
+                    autoComplete="off"
+                    spellCheck={false}
                     onChange={e => setCustomPhenomenon(e.target.value)}
                     className="flex-1 bg-slate-950 border border-amber-500/60 rounded-xl px-3 py-2 text-xs text-amber-300 placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
                     autoFocus
@@ -2353,6 +2424,8 @@ export default function StudioMeteoPage() {
                 type="text"
                 placeholder="Ex: Nette dégradation pluvieuse et venteuse dès mercredi..."
                 value={topic}
+                autoComplete="off"
+                spellCheck={false}
                 onChange={e => setTopic(e.target.value)}
                 className={`w-full bg-slate-950 border ${autoDetectedBadge ? 'border-emerald-500/70 ring-1 ring-emerald-500/40' : 'border-slate-700'} rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 font-semibold transition placeholder-slate-600`}
               />
@@ -2432,6 +2505,8 @@ export default function StudioMeteoPage() {
                   type="url"
                   placeholder="Collez n'importe quelle URL (meteobtp.fr, ouest-france, infoclimat, actu.fr, etc.)"
                   value={articleUrl}
+                  autoComplete="off"
+                  spellCheck={false}
                   onChange={e => setArticleUrl(e.target.value)}
                   className="w-full bg-slate-950/90 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400 transition-all font-mono"
                 />
@@ -2512,6 +2587,8 @@ export default function StudioMeteoPage() {
               rows={4}
               placeholder="Collez ici le résultat de ChatGPT ou vos notes brutes (le Titre, le Phénomène et la Durée seront automatiquement détectés et remplis au sommet !)..."
               value={manualPromptText}
+              autoComplete="off"
+              spellCheck={false}
               onChange={e => {
                 setManualPromptText(e.target.value);
                 autoDetectAndUpdateMetadata(e.target.value);
@@ -2906,6 +2983,8 @@ export default function StudioMeteoPage() {
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-1">Titre SEO</label>
                         <input
                           value={editTitle}
+                          autoComplete="off"
+                          spellCheck={false}
                           onChange={e => setEditTitle(e.target.value)}
                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold focus:outline-none focus:border-amber-400"
                         />
@@ -2917,6 +2996,8 @@ export default function StudioMeteoPage() {
                         <textarea
                           rows={3}
                           value={editExcerpt}
+                          autoComplete="off"
+                          spellCheck={false}
                           onChange={e => setEditExcerpt(e.target.value)}
                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
                         />
@@ -2925,6 +3006,8 @@ export default function StudioMeteoPage() {
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Catégorie</label>
                         <input
                           value={editCategory}
+                          autoComplete="off"
+                          spellCheck={false}
                           onChange={e => setEditCategory(e.target.value)}
                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
                         />
@@ -2933,6 +3016,8 @@ export default function StudioMeteoPage() {
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Auteur</label>
                         <input
                           value={editAuthor}
+                          autoComplete="off"
+                          spellCheck={false}
                           onChange={e => setEditAuthor(e.target.value)}
                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400"
                         />
@@ -2943,6 +3028,8 @@ export default function StudioMeteoPage() {
                         </label>
                         <input
                           value={editSlug}
+                          autoComplete="off"
+                          spellCheck={false}
                           onChange={e => setEditSlug(e.target.value)}
                           placeholder="meteo-retour-de-la-pluie-1792667167"
                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-emerald-300 focus:outline-none focus:border-amber-400"
@@ -2976,6 +3063,8 @@ export default function StudioMeteoPage() {
                           </label>
                           <input
                             value={editSocialTitle}
+                            autoComplete="off"
+                            spellCheck={false}
                             onChange={e => setEditSocialTitle(e.target.value)}
                             placeholder="À copier depuis le chat ChatGPT ou à saisir manuellement"
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-semibold focus:outline-none focus:border-sky-400"
@@ -2988,6 +3077,8 @@ export default function StudioMeteoPage() {
                           <textarea
                             rows={2}
                             value={editSocialDescription}
+                            autoComplete="off"
+                            spellCheck={false}
                             onChange={e => setEditSocialDescription(e.target.value)}
                             placeholder="Accroche pour les réseaux sociaux"
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-400"
@@ -2999,6 +3090,8 @@ export default function StudioMeteoPage() {
                           </label>
                           <input
                             value={editHashtags}
+                            autoComplete="off"
+                            spellCheck={false}
                             onChange={e => setEditHashtags(e.target.value)}
                             placeholder="#meteo #previsions #France #MeteoClimatPro"
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-400"
@@ -3042,12 +3135,16 @@ export default function StudioMeteoPage() {
                               <textarea
                                 rows={2}
                                 value={post}
+                                autoComplete="off"
+                                spellCheck={false}
                                 onChange={e => setPost(e.target.value)}
                                 placeholder={`Post ${label} (à copier depuis le chat ChatGPT)`}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-400"
                               />
                               <input
                                 value={tags}
+                                autoComplete="off"
+                                spellCheck={false}
                                 onChange={e => setTags(e.target.value)}
                                 placeholder={`#hashtags ${label}`}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[10px] font-mono text-sky-300 focus:outline-none focus:border-emerald-400"
@@ -3268,6 +3365,8 @@ export default function StudioMeteoPage() {
                         type="text"
                         placeholder="BADGE"
                         value={sc.badge}
+                        autoComplete="off"
+                        spellCheck={false}
                         onChange={e => {
                           const copy = [...scenes];
                           copy[i].badge = e.target.value;
@@ -3279,6 +3378,8 @@ export default function StudioMeteoPage() {
                         type="text"
                         placeholder="TITRE DE LA SCÈNE"
                         value={sc.title}
+                        autoComplete="off"
+                        spellCheck={false}
                         onChange={e => {
                           const copy = [...scenes];
                           copy[i].title = e.target.value;
@@ -3290,6 +3391,8 @@ export default function StudioMeteoPage() {
                         type="text"
                         placeholder="Sous-titre court..."
                         value={sc.sub || ""}
+                        autoComplete="off"
+                        spellCheck={false}
                         onChange={e => {
                           const copy = [...scenes];
                           copy[i].sub = e.target.value;
@@ -3315,6 +3418,8 @@ export default function StudioMeteoPage() {
                     <textarea
                       rows={4}
                       value={sc.script_text}
+                      autoComplete="off"
+                      spellCheck={false}
                       onChange={e => {
                         const copy = [...scenes];
                         copy[i].script_text = e.target.value;

@@ -109,6 +109,32 @@ function parseJsonSafe(raw: string): unknown {
   return JSON.parse(cleaned);
 }
 
+// ponytail: Validation SSRF - rejette protocoles non-http(s), localhost et plages IP privées/cloud
+function isSafePublicUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host.endsWith(".local") ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      host === "169.254.169.254" ||
+      host.startsWith("192.168.") ||
+      host.startsWith("10.") ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+      host === "[::1]" ||
+      host === "::1"
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const { url, target_duration = 60, scene_count = 5 } = await req.json();
@@ -117,6 +143,9 @@ export async function POST(req: Request) {
     }
 
     const cleanUrl = url.trim();
+    if (!isSafePublicUrl(cleanUrl)) {
+      return NextResponse.json({ error: "URL non autorisée (http/https public uniquement, adresses locales interdites)." }, { status: 400 });
+    }
     const durationSec = Number(target_duration) || 60;
     const numScenes = Math.max(2, Math.min(10, Number(scene_count) || 5));
     const totalWordsTarget = Math.round(durationSec * 2.9);
@@ -133,9 +162,15 @@ export async function POST(req: Request) {
     // ========================================================================
     // ÉTAPE 0 : DÉTECTION RAPIDE RÉSEAU SUPABASE (meteobtp, monsieurmeteo, etc.)
     // ========================================================================
-    const isOurNetwork = cleanUrl.includes("meteobtp.fr") ||
-                         cleanUrl.includes("monsieurmeteo.com") ||
-                         cleanUrl.includes("climat-meteo.vercel.app");
+    let isOurNetwork = false;
+    try {
+      const parsedHost = new URL(cleanUrl).hostname.toLowerCase();
+      isOurNetwork = parsedHost === "meteobtp.fr" ||
+                     parsedHost.endsWith(".meteobtp.fr") ||
+                     parsedHost === "monsieurmeteo.com" ||
+                     parsedHost.endsWith(".monsieurmeteo.com") ||
+                     parsedHost === "climat-meteo.vercel.app";
+    } catch {}
 
     if (isOurNetwork) {
       try {

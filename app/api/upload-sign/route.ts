@@ -69,6 +69,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ponytail: Contrôle strict de l'extension de fichier autorisée
+  if (!/\.(png|jpe?g|webp|gif)$/i.test(safePath)) {
+    return NextResponse.json(
+      { error: "Extension non autorisée : seules les images (.png, .jpg, .jpeg, .webp, .gif) sont acceptées." },
+      { status: 403 }
+    );
+  }
+
   try {
     const res = await fetch(
       `${SUPABASE_URL}/storage/v1/object/upload/sign/${BUCKET}/${safePath}`,

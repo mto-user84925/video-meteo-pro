@@ -71,7 +71,16 @@ async function upsertArticle(
 
 function sanitizeHtml(html: string): string {
   if (!html) return "";
-  return html.replace(/<img([^>]+)>/gi, (match, attrs) => {
+  // ponytail: neutralisation stricte XSS des balises exécutables et gestionnaires inline
+  let clean = html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe\b[\s\S]*?<\/iframe>/gi, "")
+    .replace(/<object\b[\s\S]*?<\/object>/gi, "")
+    .replace(/<embed\b[\s\S]*?<\/embed>/gi, "")
+    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/href\s*=\s*["']\s*javascript:[^"']*["']/gi, 'href="#"');
+
+  return clean.replace(/<img([^>]+)>/gi, (match, attrs) => {
     if (/onerror=/i.test(attrs)) return match;
     return `<img${attrs} onerror="this.style.display='none'">`;
   });

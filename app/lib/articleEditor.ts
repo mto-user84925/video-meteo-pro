@@ -211,10 +211,19 @@ function shouldDescendDiv(block: string): boolean {
   const inner = innerHtml(block);
   const children = splitTopLevelBlocks(inner);
   if (children.length === 0) return false;
-  let remainder = inner;
-  for (const child of children) remainder = remainder.replace(child.html, "");
-  const looseText = plainText(remainder);
-  if (looseText.length > 40) return false;
+  // ponytail: calcul du texte libre sans regex replace destructive sur chaînes identiques
+  let looseLen = 0;
+  let lastEnd = 0;
+  for (const child of children) {
+    if (child.start > lastEnd) {
+      looseLen += plainText(inner.slice(lastEnd, child.start)).length;
+    }
+    lastEnd = child.start + child.html.length;
+  }
+  if (lastEnd < inner.length) {
+    looseLen += plainText(inner.slice(lastEnd)).length;
+  }
+  if (looseLen > 40) return false;
   return children.some((child) => {
     const t = tagOf(child.html);
     return TEXT_TAGS.has(t) || t === "img" || t === "figure";
@@ -327,10 +336,22 @@ export function applyArticleEdits(htmlDark: string, blocks: ArticleBlock[]): str
       continue;
     }
 
-    const replaced = original.replace(
-      /^(\s*<[a-zA-Z][^>]*>)([\s\S]*)(<\/[a-zA-Z]+\s*>\s*)$/,
-      `$1${safe}$3`
-    );
+    let replaced = original;
+    const match = /^(\s*<[a-zA-Z][^>]*>)([\s\S]*)(<\/[a-zA-Z]+\s*>\s*)$/.exec(original);
+    if (match) {
+      replaced = `${match[1]}${safe}${match[3]}`;
+    } else {
+      // ponytail: repli robuste si balise fermante atypique, évitant l'abandon silencieux
+      const openMatch = /^(\s*<[a-zA-Z][^>]*>)/.exec(original);
+      const closeMatch = /(<\/[a-zA-Z]+\s*>\s*)$/.exec(original);
+      if (openMatch && closeMatch) {
+        replaced = `${openMatch[1]}${safe}${closeMatch[1]}`;
+      } else if (openMatch) {
+        replaced = `${openMatch[1]}${safe}</${tag}>`;
+      } else {
+        replaced = safe;
+      }
+    }
     result = result.slice(0, edit.start) + replaced + result.slice(edit.end);
   }
   return result;
