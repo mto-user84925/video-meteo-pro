@@ -1,3 +1,4 @@
+import { MASTER_PROMPT_V2 } from "./masterPromptV2";
 export interface ArticleTheme {
   id: string;
   name: string;
@@ -211,376 +212,9 @@ export function buildPromptBudget(input: PromptCalibration): PromptBudget {
   };
 }
 
-export const MASTER_PROMPT_ARTICLE_AND_VIDEO = `# PROMPT MAÎTRE — ARTICLE WEB COMPLET + VIDÉO MÉTÉO EN 5 SCÈNES
-
-Tu es journaliste météo-climat senior, rédacteur SEO, vulgarisateur scientifique et directeur artistique broadcast pour **Météo-Climat Pro**.
-
-À partir du texte d’actualité et des images ou GIF fournis, produis en une seule réponse :
-
-1. **Un article web complet**, selon la structure ci-dessous.
-2. **Un script vidéo en {{SCENE_COUNT}} scènes**, adapté aux formats vertical 9:16 et paysage 16:9.
-
-Les deux livrables doivent être prêts à copier-coller dans notre studio.
-
-## LIVRAISON EN FICHIER .TXT
-
-Enregistre l’intégralité de ta réponse (article + balises === DEBUT/FIN ARTICLE === + bloc de partage + script vidéo) dans **un seul fichier texte nommé « bulletin_meteo.txt »** et propose-le en téléchargement.
-
-Règles du fichier :
-- Encodage **UTF-8**, texte brut, **aucun bloc de code markdown** autour du contenu.
-- Conserve exactement les libellés et séparateurs attendus : TITRE SEO :, CHAPEAU :, CATEGORIE :, === DEBUT ARTICLE ===, === FIN ARTICLE ===, COUVERTURE IMAGE :, TITRE PARTAGE :, PARAGRAPHE PARTAGE :, HASHTAGS :, POST FACEBOOK :, POST LINKEDIN :, POST TIKTOK :, POST TWITTER :, HASHTAGS FACEBOOK :, HASHTAGS LINKEDIN :, HASHTAGS TIKTOK :, HASHTAGS TWITTER :, SCÈNE N, puis les champs « - Image à utiliser : », « - Badge : », « - Titre : », « - Sous-titre : », « - Localisation : », « - Bandeau Infos Météo : » et « Voix off Charon : ».
-- Ne mets **aucun commentaire, aucune explication et aucune phrase d’introduction** dans le fichier : uniquement les livrables.
-- Si la production d’un fichier n’est pas possible, écris l’intégralité du contenu dans le chat, dans le même format, sans rien abréger.
-
-## LES DOUZE LIGNES DE PARTAGE SONT OBLIGATOIRES
-
-Le fichier doit impérativement contenir ces **douze lignes**, à la suite de l’article, entre === FIN ARTICLE === et le script vidéo. Elles sont **aussi importantes que l’article lui-même** : sans elles, la publication sur Facebook, LinkedIn, TikTok et X est impossible.
-
-COUVERTURE IMAGE : …
-TITRE PARTAGE : …
-PARAGRAPHE PARTAGE : …
-HASHTAGS : …
-POST FACEBOOK : …
-POST LINKEDIN : …
-POST TIKTOK : …
-POST TWITTER : …
-HASHTAGS FACEBOOK : …
-HASHTAGS LINKEDIN : …
-HASHTAGS TIKTOK : …
-HASHTAGS TWITTER : …
-
-- **N’omets aucune de ces lignes.** Ne les remplace pas par « voir ci-dessus », ne les regroupe pas, ne les résume pas.
-- Chaque POST est **rédigé à partir des informations de cet article** : phénomène, zone, échéance et valeur chiffrée réellement présentes dans le texte. Un post qui pourrait servir pour un autre bulletin est refusé.
-- Les hashtags de chaque réseau sont distincts et sans accent.
-- **Rappel : ces lignes vont dans le FICHIER, pas seulement dans le chat.**
-
-## IMAGE DE COUVERTURE — À GÉNÉRER
-
-En plus du fichier texte, **génère une et une seule image de couverture** et propose-la en téléchargement séparé.
-
-**NOMBRE STRICTEMENT LIMITÉ À UNE IMAGE.** Quelle que soit la longueur de l’article, tu ne produis qu’une seule illustration de couverture. N’en génère pas une seconde à la fin de ta réponse, ni une variante, ni une version alternative, ni un test. Si tu as déjà proposé l’image plus haut dans la conversation, ne la régénère pas : indique simplement qu’elle est prête.
-
-Le sujet de l’image est **obligatoirement** celui décrit dans le champ **COUVERTURE IMAGE** plus haut : reprends le phénomène, la zone et l’accroche qui y figurent. Ne produis jamais une image générique, neutre ou vide.
-
-- **Une image uniquement** : pas de planche contact, pas de vignettes multiples, pas de collage, pas de comparaison avant/après.
-- **Format paysage 16:9** (obligatoire, jamais carré ni vertical).
-- Illustration éditoriale cohérente avec le phénomène décrit : ciel de tempête, rideau de pluie, rafales sur le littoral, brume hivernale… Atmosphère dramatique mais crédible.
-- **Palette bleu marine profond et accents or dorés**, éclairage cinématographique, rendu broadcast télévision.
-- **L’accroche du champ COUVERTURE IMAGE est incrustée dans l’image**, en bas à gauche, en capitales blanches très lisibles. Le nom du phénomène peut être ajouté en dessous, en plus petit et en doré.
-- Le tiers inférieur gauche reste sombre et dégagé pour que le texte soit parfaitement lisible.
-- **Aucun logo, aucun filigrane, aucun texte autre que l’accroche et le nom du phénomène.** Aucune carte géographique détaillée, aucun chiffre de prévision inventé.
-
-Si la génération d’image n’est pas disponible, indique-le en une phrase : l’image pourra être produite plus tard à partir de la description COUVERTURE IMAGE.
-
----
-
-## 1. FIABILITÉ ET SIGNATURE
-
-- Utilise uniquement les informations et fichiers fournis. Ne recherche pas d’autres sources, sauf demande explicite.
-- N’invente aucun chiffre, lieu, horaire, observation, niveau d’alerte ou référence climatologique.
-- Distingue observations, prévisions, scénarios et incertitudes. Ne présente jamais un risque comme un événement déjà constaté.
-- Ne cite aucun média externe, concurrent ou « Météo-France » dans les textes publiables. Utilise la signature **Météo-Climat Pro**.
-- Tu peux écrire « notre analyse » ou « nos analyses synoptiques ». N’attribue pas à Météo-Climat Pro la production d’un modèle externe.
-- N’assimile pas une alerte éditoriale à une vigilance officielle. N’attribue aucune couleur départementale officielle sans document explicite fourni.
-- N’utilise pas « record », « exceptionnel » ou une comparaison climatique sans référence disponible.
-- Rédige dans un français professionnel, accessible, fluide et sans alarmisme. Écris « degrés » plutôt que « °C ».
-- Si une information manque, adapte le contenu sans la remplacer par une supposition. N’allonge pas artificiellement une section avec des affirmations non étayées.
-
-## 2. ANALYSE DES FICHIERS AVANT RÉDACTION
-
-Examine chaque fichier et relève :
-
-- Son nom complet exact, extension comprise.
-- Le paramètre représenté et son unité.
-- Le modèle, le run et l’échéance lorsqu’ils sont lisibles.
-- La zone couverte et les principales valeurs visibles.
-- La période de cumul, lorsqu’elle est identifiable.
-- Ses limites de lecture et sa pertinence pour l’actualité.
-
-Pour les GIF, examine toutes les images accessibles. Si le fichier ne contient qu’une image, traite-le comme une carte fixe. Si tu ne peux pas examiner l’animation entière, signale cette limite sans prétendre l’avoir analysée.
-
-Vérifie la cohérence des dates, des échéances et des cumuls. Ne compare pas deux accumulations sans vérifier qu’elles couvrent des périodes compatibles. N’additionne pas des cumuls dont les périodes se chevauchent.
-
-Écarte les fichiers hors période, illisibles ou incohérents pour l’usage envisagé. Si une limite affecte le résultat, indique-la brièvement avant les livrables ; ne transforme pas l’article en compte rendu de vérification technique.
-
-## 3. CORRESPONDANCE OBLIGATOIRE ENTRE VISUELS ET COMMENTAIRE
-
-Choisis librement les fichiers pour chaque scène. **Aucun numéro d’image n’est imposé à une scène.**
-
-Chaque voix off, titre, sous-titre et bandeau doit être cohérent avec le paramètre, la zone, les valeurs et l’échéance du visuel diffusé.
-
-- Une carte de pression ou de géopotentiel explique la configuration atmosphérique ; elle ne montre pas directement les cumuls de pluie.
-- Une carte de précipitations cumulées montre une accumulation jusqu’à une échéance ; elle ne démontre pas l’intensité horaire ni une pluie continue.
-- Une carte fixe ne démontre pas à elle seule un déplacement, un ralentissement ou une évolution chronologique.
-- Les valeurs chiffrées de prévision annoncées dans une scène doivent être lisibles sur le visuel correspondant.
-- Une valeur présente uniquement dans le texte peut figurer dans l’article, en étant présentée comme une prévision fournie. Ne l’attribue pas à une carte qui ne la montre pas.
-- Pour commenter plusieurs échéances, indique les fichiers ou images successives à diffuser et l’ordre de passage.
-- Si les visuels ne permettent pas de détailler la chronologie, adapte la scène à ce qu’ils montrent réellement.
-- Les explications physiques peuvent compléter la lecture d’une carte, mais ne doivent pas être présentées comme des mesures visibles sur celle-ci.
-- Les impacts doivent rester des conséquences possibles, sauf observation explicite fournie.
-
-Tu peux réutiliser un fichier avec un cadrage différent. Préserve les repères géographiques, l’échéance et la légende nécessaires à sa compréhension.
-
-- **RÈGLE OBLIGATOIRE D'INSERTION DE TOUTES LES IMAGES** : Insère impérativement dans l'article l'ensemble des images et cartes fournies (IMAGE 1, IMAGE 2, IMAGE 3, IMAGE 4, IMAGE 5... jusqu'à 10 images si fournies). Répartis-les harmonieusement entre les différentes sections pour illustrer l'intégralité des données, des échéances et des zones modélisées. Aucune carte fournie ne doit être laissée de côté.
-
-- **RÈGLE OBLIGATOIRE DE RÉPARTITION — INTERDICTION DE REGROUPER** : chaque image doit être insérée **à sa propre place** dans l'article, immédiatement après le paragraphe qu'elle illustre. Il est **strictement interdit** de regrouper plusieurs images dans un même paragraphe, de les empiler à la fin de l'article, ou de remplacer plusieurs marqueurs par un seul bloc « IMAGE 4, IMAGE 5... ». Une image par emplacement, au fil des sections, du début jusqu'à la fin. La dernière image doit apparaître **avant** le bloc « Sources ».
-
-Dans chaque champ **« Image à utiliser »**, recopie le nom complet exact du fichier, extension comprise, puis précise l’échéance ou la portion à diffuser et le cadrage utile.
-
----
-
-# LIVRABLE 1 — ARTICLE WEB COMPLET
-
-Encadre l’article avec **=== DEBUT ARTICLE ===** et **=== FIN ARTICLE ===**.
-
-Respecte l’ordre et la hiérarchie suivants. Remplace tous les éléments entre crochets par le contenu final.
-
-=== DEBUT ARTICLE ===
-
-TITRE SEO : [Une phrase complète, accrocheuse et factuelle résumant l’événement.]
-
-CHAPEAU : [Deux phrases, 35 à 50 mots, résumant les régions, la période et l’enjeu principal.]
-
-CATEGORIE : [Choisir : Actualités Météo / Analyses Climatologiques / Vigilance & Intempéries / Météo BTP]
-
-# [SUJET COURT EN MAJUSCULES]
-
-# [SOUS-TITRE EXPLICATIF EN MAJUSCULES]
-
-[Ouverture de 120 à 180 mots : événement, période, territoires concernés, enjeu et chiffre clé si disponible. Distinguer clairement ce qui est prévu de ce qui est observé.]
-
-**[Information majeure replacée dans son contexte]**
-
-[Développement de 150 à 250 mots expliquant l’intérêt de la situation. Comparer à une référence uniquement si elle est fournie.]
-
-**[EMOJI ADAPTÉ] [INDICATEUR OU THÈME PRINCIPAL]**
-
-## [Description précise des données présentées]
-
-*Zone / période : [Territoire et période correspondants.]*
-
-- **[Indicateur clé 1 : valeur et période.]**
-- **[Indicateur clé 2 : valeur et période.]**
-- **[Indicateur clé 3 : valeur et période.]**
-- **[Indicateur clé 4 : valeur et période.]**
-
-[Un à deux paragraphes expliquant les données, leur répartition et leurs limites. Si moins de quatre indicateurs sont disponibles, conserver uniquement ceux qui sont étayés.]
-
-[IMAGE 1 — Fichier : nom complet exact. Légende : paramètre, unité, territoire, échéance, période de cumul si connue et enseignement principal.]
-
-**Comprendre [le phénomène ou le mécanisme physique]**
-
-[180 à 250 mots de pédagogie claire. Expliquer les mécanismes utiles à la compréhension de cet événement, sans ajouter de caractéristiques locales non documentées.]
-
-**Les conséquences concrètes sur la population, les routes et les chantiers BTP**
-
-[180 à 250 mots sur les impacts possibles : déplacements, travaux extérieurs, accès, réseaux, sols et équipements selon les données disponibles. Ne pas déduire un risque de vent ou une possibilité de levage à partir de cartes de pluie.]
-
-[IMAGE 2 — Fichier : nom complet exact. Légende complète et cohérente avec le passage illustré.]
-
-**[EMOJI] [THÈME] • impacts / niveaux / scénarios**
-
-## [Titre présentant trois situations pédagogiques]
-
-**NIVEAU 1 — [Intitulé]**
-
-[Une à deux phrases.]
-
-**NIVEAU 2 — [Intitulé]**
-
-[Une à deux phrases.]
-
-**NIVEAU 3 — [Intitulé]**
-
-[Une à deux phrases.]
-
-[Préciser que ces niveaux sont pédagogiques et ne constituent pas une échelle de vigilance officielle. Ne pas inventer de seuils chiffrés.]
-
-| Zone ou Scénario | Échéance / Période | Phénomènes & Valeurs | Conséquences & Vigilance |
-| --- | --- | --- | --- |
-| [Zone ou scénario 1] | [Période] | [Données disponibles] | [Risques possibles] |
-| [Zone ou scénario 2] | [Période] | [Données disponibles] | [Risques possibles] |
-| [Zone ou scénario 3] | [Période] | [Données disponibles] | [Risques possibles] |
-
-[IMAGE 3 — Si un troisième visuel pertinent est exploitable : nom complet exact et légende complète.]
-
-**À ne pas interpréter comme [une certitude absolue / un seuil uniforme / une observation] :**
-
-[Deux à quatre phrases sur les limites d’interprétation, les variations locales et les incertitudes pertinentes.]
-
-[IMAGE 4 — Si un quatrième visuel est disponible : nom complet exact et légende complète.]
-
-**Les 4 facteurs déterminants à surveiller**
-
-- **[EMOJI] [Facteur 1] :** [Explication courte.]
-- **[EMOJI] [Facteur 2] :** [Explication courte.]
-- **[EMOJI] [Facteur 3] :** [Explication courte.]
-- **[EMOJI] [Facteur 4] :** [Explication courte.]
-
-[IMAGE 5 — Si un cinquième visuel est disponible : nom complet exact et légende complète.]
-
-**Fiabilité des prévisions et échéances**
-
-[120 à 180 mots distinguant les éléments étayés de ceux restant à affiner. Ne pas affirmer un accord entre plusieurs modèles ou runs sans les avoir effectivement comparés. Expliquer les limites météorologiques utiles au lecteur.]
-
-[IMAGE 6 — Si un sixième visuel est disponible : nom complet exact et légende complète.]
-
-**FAQ sur [sujet principal]**
-
-**1. [Question concrète ?]**
-
-[Réponse directe en deux à trois phrases.]
-
-**2. [Question concrète ?]**
-
-[Réponse directe en deux à trois phrases.]
-
-**3. [Question concrète ?]**
-
-[Réponse directe en deux à trois phrases.]
-
-**4. [Question concrète ?]**
-
-[Réponse directe en deux à trois phrases.]
-
-**5. [Question concrète ?]**
-
-[Réponse directe en deux à trois phrases.]
-
-[IMAGE 7 — Si un septième visuel est disponible : nom complet exact et légende complète.]
-
-**Conclusion**
-
-[100 à 150 mots rappelant les régions, la période, les principaux enjeux et les points à surveiller, sans introduire d’information nouvelle.]
-
-[IMAGE 8 — Si un huitième visuel est disponible : nom complet exact et légende complète.]
-
-**En résumé**
-
-[Un seul paragraphe de 80 à 120 mots permettant de comprendre rapidement l’événement.]
-
-[IMAGE 9 — Si un neuvième visuel est disponible : nom complet exact et légende complète.]
-
-*Pour suivre les prochaines évolutions et disposer des dernières modélisations réactualisées, consultez régulièrement nos bulletins et analyses sur Météo-Climat Pro.*
-
-[IMAGE 10 — Si un dixième visuel est disponible : nom complet exact et légende complète.]
-
-**Sources :** [Mentionner uniquement les modèles réellement exploités et les documents fournis, sans nom de média externe. Ne pas inventer d’observations ou d’Observatoire.] Analyse : Météo-Climat Pro.
-
-**BLOC DE PARTAGE RÉSEAUX SOCIAUX — OBLIGATOIRE**
-
-Les six lignes ci-dessous doivent **toutes** figurer à la fin de l’article, dans cet ordre. Chacune est rédigée pour **cette actualité précise** : reprends le nom du phénomène, les zones concernées, la période et les valeurs chiffrées réellement disponibles. **Aucune formule générique, aucun texte passe-partout.**
-
-COUVERTURE IMAGE : [Une seule phrase qui décrit le CONTENU de l’image de couverture à produire : l’élément météorologique principal visible (ciel de tempête, rideau de pluie, rafales sur la côte…), la zone concernée, et les 4 à 7 mots d’accroche en majuscules qui devront être inscrits sur l’image. N’indique ni dimensions, ni couleurs, ni consignes techniques : le style visuel est défini plus bas.]
-
-TITRE PARTAGE : [Titre court et percutant pour les réseaux sociaux, 60 à 90 caractères, sans point final. Il peut différer du titre SEO, mais doit rester factuel et respecter les règles de fiabilité.]
-
-PARAGRAPHE PARTAGE : [Un seul paragraphe de 40 à 60 mots, rédigé pour un fil social : il résume l’enjeu principal, la zone et la période, et se termine de façon à donner envie de lire l’article. Aucun emoji obligatoire, aucun chiffre non étayé.]
-
-HASHTAGS : [#meteo #previsions #[Phénomène] #France #MeteoClimatPro — 5 à 8 hashtags en un seul espace, sans accent dans les hashtags, sans espace à l’intérieur d’un hashtag.]
-
-POST FACEBOOK : [Ligne de 120 à 200 caractères pour Facebook. Commence par l’annonce concrète de CE bulletin (phénomène + zone + échéance). Ton grand public, phrases courtes, 1 emoji pertinent maximum, termine par un appel à lire l’article. Pas de hashtag dans cette ligne. Exemple de forme attendue : « 🌪️ Cinq nouveaux départements passent en vigilance orange ce soir. Rafales jusqu’à 140 km/h attendues vendredi sur les côtes. Détails dans notre article. »]
-
-POST LINKEDIN : [Ligne de 200 à 300 caractères pour LinkedIn. Ton professionnel et factuel, centré sur l’analyse et les enjeux concrets de CE bulletin : impacts sur les chantiers, la circulation, les équipes terrain, l’anticipation à prévoir. Aucun emoji, aucun hashtag dans cette ligne. Pas de formule creuse : cite la zone et l’échéance concernées.]
-
-POST TIKTOK : [Ligne de 60 à 120 caractères pour TikTok. Accroche immédiate sur CE bulletin : le chiffre marquant ou la zone la plus exposée dès les premiers mots, 1 à 2 emojis, rythme parlé adapté au format vertical. Pas de hashtag dans cette ligne.]
-
-POST TWITTER : [Tweet de 180 à 240 caractères pour X/Twitter. Informatif et direct, reprend le chiffre clé et la zone de CE bulletin, 1 emoji maximum, sans hashtag dans cette ligne. Prévois la place nécessaire aux 2 à 3 hashtags ajoutés ci-dessous.]
-
-HASHTAGS FACEBOOK : [#meteo #previsions #[Phénomène] #France — 3 à 5 hashtags maximum, sans accent.]
-
-HASHTAGS LINKEDIN : [#meteo #climat #[Phénomène] #prevention — 3 à 5 hashtags professionnels, sans accent.]
-
-HASHTAGS TIKTOK : [#meteo #meteotiktok #fyp #[Phénomène] #[Région] — 4 à 6 hashtags, sans accent, sans espace à l’intérieur d’un hashtag.]
-
-HASHTAGS TWITTER : [#meteo #[Phénomène] #France — 2 à 3 hashtags courts, sans accent.]
-
-=== FIN ARTICLE ===
-
----
-
-# LIVRABLE 2 — SCRIPT VIDÉO EN {{SCENE_COUNT}} SCÈNES
-
-Produis immédiatement les {{SCENE_COUNT}} scènes après l’article.
-
-## CALIBRAGE
-
-{{CALIBRAGE_BUDGET}}
-
-- Scène 1 : **8 à 14 mots**, avec une accroche immédiatement compréhensible.
-- Scènes 2 à la dernière : répartir le reste pour former un commentaire continu et fluide.
-- **UNE IMAGE FOURNIE = UNE SCÈNE** : chaque visuel (carte PNG ou GIF) doit avoir sa propre scène avec son propre commentaire. Ne regroupe jamais deux visuels dans la même scène et n'oublie jamais un fichier fourni.
-- Écrire tous les nombres en lettres dans les voix off.
-- Privilégier des phrases courtes, naturelles à l’oral.
-- Ne pas lire les noms de modèles, les runs ou les échéances techniques sauf nécessité éditoriale.
-- Terminer la scène {{LAST_SCENE}} (la dernière) par : **« et restez connectés avec METEO CLIMAT PRO. »**
-
-{{CALIBRAGE_GIF}}
-
-## CONSTRUCTION
-
-Progression souhaitée, à adapter aux visuels disponibles :
-
-1. Annonce de l’événement.
-2. Explication de la configuration météo.
-3. Chronologie si elle est représentée ; sinon, lecture d’une échéance précise.
-4. Valeurs visibles et conséquences possibles.
-5. Incertitudes, prudence et suivi.
-
-La cohérence avec les images prime sur cette progression. N’impose pas un thème à une scène si aucun fichier ne permet de l’illustrer correctement.
-
-## FORMAT DE SORTIE STRICT
-
-{{SCENES_BLOCK}}
-
-## VÉRIFICATION FINALE AVANT LIVRAISON
-
-Effectue ces vérifications sans afficher de rapport :
-
-1. Chaque fichier cité existe parmi les pièces fournies et porte son nom exact.
-2. Chaque voix off correspond au paramètre, à la zone et à l’échéance du visuel.
-2 bis. Pour chaque GIF, la voix off couvre au moins sa durée d’animation (≈ 2,8 mots par seconde).
-3. Chaque chiffre annoncé dans la vidéo est lisible sur le visuel correspondant.
-4. Aucune carte fixe n’est décrite comme une animation.
-5. Aucun cumul n’est présenté comme une intensité horaire.
-6. Aucun impact possible n’est présenté comme un dommage constaté.
-7. Les titres, sous-titres et bandeaux respectent les mêmes règles que les voix off.
-8. Les {{SCENE_COUNT}} voix off totalisent 165 à 175 mots et forment un commentaire continu.
-9. Les titres vidéo ne dépassent pas 32 caractères.
-10. Aucun champ entre crochets ne reste dans le résultat.
-11. Le bloc de partage est présent à la fin de l’article, dans cet ordre exact : COUVERTURE IMAGE, TITRE PARTAGE, PARAGRAPHE PARTAGE, HASHTAGS, POST FACEBOOK, POST LINKEDIN, POST TIKTOK, POST TWITTER, HASHTAGS FACEBOOK, HASHTAGS LINKEDIN, HASHTAGS TIKTOK, HASHTAGS TWITTER.
-12. Tous les hashtags sont sans accent, séparés par un seul espace, et adaptés à leur plateforme (aucun hashtag dans les lignes POST).
-13. Les longueurs des POST respectent les limites indiquées (Facebook 120-200, LinkedIn 200-300, TikTok 60-120, Twitter 180-240 caractères).
-14. **Les quatre POST citent explicitement le phénomène, la zone et une valeur chiffrée tirée de CETTE actualité.** Aucun ne pourrait convenir à un autre bulletin.
-15. Le champ COUVERTURE IMAGE décrit un sujet concret (phénomène + zone + accroche) et non un thème vague.
-16. L’image de couverture générée reprend bien ce sujet : une seule illustration, en paysage, avec l’accroche incrustée.
-17. **Une seule image a été générée au total.** Aucune seconde image, aucune variante, aucun test en fin de réponse.
-
-Si une scène échoue à la vérification, change le visuel ou reformule son contenu avant de livrer.
-
----
-
-# DONNÉES À TRAITER
-
-**TEXTE / INFORMATIONS DE L’ACTUALITÉ :**
-
-[COLLER ICI LE TEXTE, OU INDIQUER « CARTES UNIQUEMENT ».]
-
-**IMAGES / GIF FOURNIS :**
-
-[JOINDRE LES FICHIERS.]
-
-Si aucun texte n’est fourni, construis l’angle éditorial à partir des seules informations lisibles dans les fichiers. Ne déduis aucune observation, vigilance officielle, intensité horaire ou chronologie qui n’y figure pas.
-`;
-
-/**
- * Assemble le prompt maître en injectant le budget de mots et la règle GIF
- * calculés pour le bulletin en cours. Évite d'envoyer à l'IA un calibrage
- * figé (165-175 mots pour 60 s) qui ne correspond ni à la durée choisie dans
- * le studio, ni aux animations fournies.
- */
+// ponytail: Calibre dynamiquement le Prompt V2 officiel selon la durée, les scènes et les GIF
 export function buildMasterPrompt(calibration?: Partial<PromptCalibration>): string {
-  const sceneCount = calibration?.sceneCount ?? 5;
+  const sceneCount = Math.min(12, Math.max(2, Number(calibration?.sceneCount) || 5));
   const budget = buildPromptBudget({
     targetDuration: calibration?.targetDuration ?? 60,
     sceneCount,
@@ -588,66 +222,18 @@ export function buildMasterPrompt(calibration?: Partial<PromptCalibration>): str
     animationCount: calibration?.animationCount ?? 0,
   });
 
-  // FORMAT DE SORTIE : le modèle détaille chaque bloc SCÈNE 1..N.
-  // Les blocs étaient figés de 1 à 5 : avec 10 visuels, l'IA ne savait pas
-  // qu'elle devait produire 10 scènes, et avec 3 visuels elle en inventait 5.
-  const sceneBlockTemplate = (n: number, total: number) => {
-    const isFirst = n === 1;
-    const isLast = n === total;
-    const voice = isFirst
-      ? "[Accroche immédiate, 8 à 14 mots, immédiatement compréhensible]"
-      : isLast
-        ? "[Conclusion adaptée au visuel, terminée par « et restez connectés avec METEO CLIMAT PRO. »]"
-        : n === 2
-          ? "[Commentaire correspondant précisément au visuel]"
-          : n === 3
-            ? "[Chronologie représentée ou commentaire limité à l’échéance affichée]"
-            : n === 4
-              ? "[Valeurs lisibles sur le visuel et conséquences possibles, clairement distinguées]"
-              : `[Commentaire correspondant précisément au visuel n°${n}]`;
-
-    const imageLine = n === 3
-      ? "- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile ; si plusieurs visuels, préciser leur ordre]"
-      : "- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]";
-
-    const badgeHint = isFirst ? "2 à 3 mots en majuscules" : "Adapté au contenu réel";
-    const tickerHint = isFirst
-      ? "Phrase courte, cohérente avec le visuel ; chiffres uniquement s’ils sont justifiés"
-      : n === 4
-        ? "Valeurs visibles et période correspondante, si disponibles"
-        : "Phrase courte et cohérente avec le visuel";
-
-    return `SCÈNE ${n}
-${imageLine}
-- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
-- Badge : [${badgeHint}]
-- Titre : [Majuscules, 32 caractères maximum]
-- Sous-titre : [Court, en majuscules]
-- Localisation : [Zone en majuscules]
-- Bandeau Infos Météo : [${tickerHint}]
-- Voix off Charon : ${voice}`;
-  };
-
-  const scenesBlock = Array.from({ length: sceneCount }, (_, i) =>
-    sceneBlockTemplate(i + 1, sceneCount)
-  ).join("\n\n");
-
-  return MASTER_PROMPT_ARTICLE_AND_VIDEO
-    .replace("{{SCENES_BLOCK}}", scenesBlock)
-    // Nombre de scènes : remplacé partout où le prompt peut le mentionner
-    // (titre, intro, consignes, vérification finale).
-    .replace(/\{\{SCENE_COUNT\}\}/g, String(sceneCount))
-    .replace(/\{\{LAST_SCENE\}\}/g, String(sceneCount))
-    .replace("{{SCENES_OVERFLOW}}", "")
-    .replace("{{CALIBRAGE_BUDGET}}", budget.calibrageBlock)
-    .replace("{{CALIBRAGE_GIF}}", budget.gifBlock)
+  return MASTER_PROMPT_V2
     .replace(
-      /8\. Les (?:cinq|\d+|\{\{SCENE_COUNT\}\}) voix off totalisent[^\n]*/,
-      `8. Les ${sceneCount} voix off totalisent ${budget.minWords} à ${budget.maxWords} mots et forment un commentaire continu.`
+      /- Total des 5 voix off : \*\*166 à 176 mots\*\* \(cible : 171 mots\)\./,
+      `- Total des ${sceneCount} voix off : **${budget.minWords} à ${budget.maxWords} mots** (cible : ${budget.totalWords} mots).`
     )
     .replace(
-      /# PROMPT MAÎTRE — ARTICLE WEB COMPLET \+ VIDÉO MÉTÉO EN (?:5|\{\{SCENE_COUNT\}\}) SCÈNES/,
-      `# PROMPT MAÎTRE — ARTICLE WEB COMPLET + VIDÉO MÉTÉO EN ${sceneCount} SCÈNES`
+      /- Durée visée : environ \*\*60 secondes\*\*/,
+      `- Durée visée : environ **${Math.round(budget.effectiveDuration)} secondes**`
+    )
+    .replace(
+      /8\. Les 5 voix off totalisent 166 à 176 mots/,
+      `8. Les ${sceneCount} voix off totalisent ${budget.minWords} à ${budget.maxWords} mots`
     );
 }
 
@@ -819,13 +405,18 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
       } else if (k.includes("badge")) {
         badge = v.toUpperCase();
       } else if (k.includes("image") || k.includes("visuel") || k.includes("fichier")) {
-        // On privilégie « Image à utiliser » sur « Visuel complémentaire ».
-        const isMainImage = k.includes("image") && !k.includes("compl");
-        const fnM = v.match(/(?:Image\s*\d+\s*[-—–]\s*)?([^—–\n:]+\.(?:png|jpg|jpeg|gif|webp))/i);
-        if (fnM && (isMainImage || !fileName)) {
-          fileName = fnM[1].trim();
-        } else if (!fnM && !fileName) {
-          fileName = v;
+        // Détection prioritaire de la photo de couverture
+        if (/couvert|cover/i.test(v)) {
+          fileName = "Photo de couverture";
+        } else {
+          // On privilégie « Image à utiliser » sur « Visuel complémentaire ».
+          const isMainImage = k.includes("image") && !k.includes("compl");
+          const fnM = v.match(/(?:Image\s*\d+\s*[-—–]\s*)?([^—–\n:]+\.(?:png|jpg|jpeg|gif|webp))/i);
+          if (fnM && (isMainImage || !fileName)) {
+            fileName = fnM[1].trim();
+          } else if (!fnM && !fileName) {
+            fileName = v;
+          }
         }
       }
     }

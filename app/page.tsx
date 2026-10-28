@@ -30,9 +30,7 @@ import {
 } from "lucide-react";
 import {
   ARTICLE_THEMES,
-  MASTER_PROMPT_ARTICLE_AND_VIDEO,
   buildWordForWordArticleHtml,
-  buildMasterPrompt,
   buildPromptBudget,
   detectBestArticleTheme,
   parseFullVideoScript,
@@ -96,13 +94,25 @@ function matchImageForScene(
   idx: number,
   existingImagesByRef: Record<number, { url: string; name: string }>,
   currentScene?: Scene,
-  usedUrls: Set<string> = new Set()
+  usedUrls: Set<string> = new Set(),
+  coverImage?: { url: string; name: string }
 ): { url: string; name: string } {
   const allImages = Object.entries(existingImagesByRef)
     .filter(([_, img]) => img && img.url)
     .map(([refStr, img]) => ({ ref: Number(refStr), url: img.url, name: img.name }));
 
+  // Détection prioritaire de la photo de couverture (Hook Scène 1)
+  const hintLower = (ps.fileName || "").toLowerCase();
+  const isCoverRequested = hintLower.includes("couvert") || hintLower.includes("cover");
+
+  if (coverImage?.url && (isCoverRequested || (ps.scene_number === 1 && (!ps.fileName || isCoverRequested || !/\.(png|jpg|jpeg|gif|webp)/i.test(ps.fileName))))) {
+    return { url: coverImage.url, name: coverImage.name || "Photo de couverture 16:9" };
+  }
+
   if (allImages.length === 0) {
+    if (coverImage?.url && (ps.scene_number === 1 || isCoverRequested)) {
+      return { url: coverImage.url, name: coverImage.name || "Photo de couverture 16:9" };
+    }
     if (currentScene && currentScene.file_url) {
       return { url: currentScene.file_url, name: currentScene.file_name || ps.fileName || "" };
     }
@@ -111,6 +121,9 @@ function matchImageForScene(
 
   // Si une seule image existe au total
   if (allImages.length === 1) {
+    if (coverImage?.url && (ps.scene_number === 1 || isCoverRequested)) {
+      return { url: coverImage.url, name: coverImage.name || "Photo de couverture 16:9" };
+    }
     return allImages[0];
   }
 
@@ -609,12 +622,12 @@ export default function StudioMeteoPage() {
     ]);
   };
 
-  // Vider tout cache navigateur éventuel à chaque ouverture du studio
+  // ponytail: Nettoyage systématique des timers de polling au démontage
   useEffect(() => {
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-    } catch {}
+    return () => {
+      if (renderTimerRef.current) clearInterval(renderTimerRef.current);
+      if (renderPollRef.current) clearInterval(renderPollRef.current);
+    };
   }, []);
 
   const handleResetAll = () => {
@@ -886,8 +899,23 @@ export default function StudioMeteoPage() {
       const pubUrl = await uploadSceneFile(file, remotePath);
       setCoverImageUrl(pubUrl);
       setCoverImageName(file.name);
+
+      // Auto-assignation directe de la couverture en Scène 1 (Hook d'ouverture)
+      setScenes(prev => {
+        if (!prev || prev.length === 0) return prev;
+        const copy = [...prev];
+        copy[0] = {
+          ...copy[0],
+          file_url: pubUrl,
+          file_name: file.name,
+          image_hint: copy[0].image_hint || "Photo de couverture 16:9"
+        };
+        return copy;
+      });
+
       addArticleLog(`✓ Photo de couverture enregistrée sur Supabase Storage.`, "success");
-      notify("Photo de couverture 16:9 enregistrée !", "success");
+      addArticleLog(`🎬 Photo de couverture automatiquement assignée à la Scène 1 (Hook d'ouverture).`, "images");
+      notify("Photo de couverture 16:9 enregistrée et assignée à la Scène 1 !", "success");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erreur lors de l'envoi de la photo de couverture.";
       addArticleLog(`❌ ${msg}`, "error");
@@ -1050,8 +1078,9 @@ export default function StudioMeteoPage() {
       const parsedVideoScenes = parseFullVideoScript(raw);
       if (parsedVideoScenes.length >= 2) {
         const usedUrls = new Set<string>();
+        const coverObj = coverImageUrl ? { url: coverImageUrl, name: coverImageName } : undefined;
         const parsedScenes: Scene[] = parsedVideoScenes.map((ps, idx) => {
-          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx], usedUrls);
+          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx], usedUrls, coverObj);
           return {
             scene_number: ps.scene_number,
             badge: ps.badge,
@@ -1163,7 +1192,8 @@ export default function StudioMeteoPage() {
             image_ref: 5
           }
         ].map((sc, i) => {
-          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i], usedUrls);
+          const coverObj = coverImageUrl ? { url: coverImageUrl, name: coverImageName } : undefined;
+          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i], usedUrls, coverObj);
           return {
             ...sc,
             file_url: matched.url,
@@ -1365,8 +1395,9 @@ export default function StudioMeteoPage() {
       if (parsedVideoScenes.length >= 2) {
         if (!isSilent) setArticleProgressPercent(75);
         const usedUrls = new Set<string>();
+        const coverObj = coverImageUrl ? { url: coverImageUrl, name: coverImageName } : undefined;
         const parsedScenes: Scene[] = parsedVideoScenes.map((ps, idx) => {
-          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx], usedUrls);
+          const matched = matchImageForScene(ps, idx, existingImagesByRef, scenes[idx], usedUrls, coverObj);
           return {
             scene_number: ps.scene_number,
             badge: ps.badge,
@@ -1528,7 +1559,8 @@ export default function StudioMeteoPage() {
             image_ref: 5
           }
         ].map((sc, i) => {
-          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i], usedUrls);
+          const coverObj = coverImageUrl ? { url: coverImageUrl, name: coverImageName } : undefined;
+          const matched = matchImageForScene({ scene_number: sc.scene_number }, i, existingImagesByRef, scenes[i], usedUrls, coverObj);
           return {
             ...sc,
             file_url: matched.url,
@@ -1855,6 +1887,14 @@ export default function StudioMeteoPage() {
         );
       }
 
+      // Détection automatique si une photo de couverture 16:9 figure dans le lot
+      const coverCandidate = uploaded.find(u => /couvert|cover/i.test(u.name));
+      if (coverCandidate && !coverImageUrl) {
+        setCoverImageUrl(coverCandidate.url);
+        setCoverImageName(coverCandidate.name);
+        addArticleLog(`📸 Photo de couverture 16:9 détectée dans le lot : "${coverCandidate.name}"`, "images");
+      }
+
       const normalize = (s: string) =>
         s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -1883,6 +1923,19 @@ export default function StudioMeteoPage() {
       }
 
       const nextScenes = baseScenes.map((sc, i) => {
+        // Scène 1 : prioritairement la photo de couverture si présente ou demandée
+        const effectiveCover = coverCandidate || (coverImageUrl ? { url: coverImageUrl, name: coverImageName } : null);
+        if (i === 0 && effectiveCover && (!sc.image_hint || /couvert|cover/i.test(sc.image_hint) || !/\.(png|jpg|jpeg|gif|webp)/i.test(sc.image_hint))) {
+          usedUrlsInUpload.add(effectiveCover.url);
+          return {
+            ...sc,
+            file_url: effectiveCover.url,
+            file_name: effectiveCover.name,
+            image_ref: 1,
+            image_hint: sc.image_hint || "Photo de couverture 16:9"
+          };
+        }
+
         let chosen = uploaded[(sc.image_ref ? sc.image_ref - 1 : i) % uploaded.length];
 
         if (sc.image_hint) {
@@ -2924,7 +2977,7 @@ export default function StudioMeteoPage() {
                           <input
                             value={editSocialTitle}
                             onChange={e => setEditSocialTitle(e.target.value)}
-                            placeholder="Détecté automatiquement depuis le prompt"
+                            placeholder="À copier depuis le chat ChatGPT ou à saisir manuellement"
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-semibold focus:outline-none focus:border-sky-400"
                           />
                         </div>
@@ -2990,7 +3043,7 @@ export default function StudioMeteoPage() {
                                 rows={2}
                                 value={post}
                                 onChange={e => setPost(e.target.value)}
-                                placeholder={`Post ${label} (rempli depuis le prompt maître)`}
+                                placeholder={`Post ${label} (à copier depuis le chat ChatGPT)`}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-400"
                               />
                               <input
@@ -3150,6 +3203,21 @@ export default function StudioMeteoPage() {
                       </div>
                     )}
 
+                    {i === 0 && coverImageUrl && sc.file_url !== coverImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const copy = [...scenes];
+                          copy[0] = { ...copy[0], file_url: coverImageUrl, file_name: coverImageName || "Photo de couverture 16:9", image_hint: "Photo de couverture 16:9" };
+                          setScenes(copy);
+                          notify("Photo de couverture 16:9 assignée à la Scène 1 !", "success");
+                        }}
+                        className="w-full mb-2 py-1 px-2 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/50 hover:border-indigo-400 text-indigo-200 hover:text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                      >
+                        ✨ Utiliser la photo de couverture en Scène 1
+                      </button>
+                    )}
+
                     {/* APERÇU VIGNETTE DE LA CARTE */}
                     <div className="w-full h-36 rounded-xl overflow-hidden relative border border-slate-700 bg-slate-950 group shadow-inner">
                       {sc.file_url ? (
@@ -3167,7 +3235,7 @@ export default function StudioMeteoPage() {
                             className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
                           />
                           <div className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-bold text-emerald-400 border border-emerald-500/40 flex items-center gap-1 shadow">
-                            <CheckCircle2 className="w-3 h-3" /> {sc.image_ref ? `Image ${sc.image_ref}` : (i === 0 ? "Couverture" : `Carte ${i + 1}`)}
+                            <CheckCircle2 className="w-3 h-3" /> {sc.file_url === coverImageUrl ? "🌟 Couverture 16:9" : (sc.image_ref ? `Image ${sc.image_ref}` : (i === 0 ? "Couverture" : `Carte ${i + 1}`))}
                           </div>
                           <label className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all text-xs text-white font-bold gap-1.5 cursor-pointer backdrop-blur-xs">
                             <Upload className="w-4 h-4 text-sky-400" /> Remplacer

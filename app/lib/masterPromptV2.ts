@@ -282,7 +282,7 @@ Produis immédiatement les 5 scènes après l’article.
 
 - Scène 1 : **8 à 14 mots**, avec une accroche immédiatement compréhensible.
 - Scènes 2 à la dernière : répartir le reste pour former un commentaire continu et fluide.
-- **UN VISUEL PAR SCÈNE** : chaque scène utilise exactement un fichier fourni. Tous les fichiers exploitables doivent figurer dans au moins une des cinq scènes. Si moins de cinq fichiers sont disponibles, réutilise un fichier dans une autre scène avec un cadrage ou un angle de commentaire cohérent, sans inventer une évolution chronologique. Si plus de cinq fichiers existent, conserve les cinq plus pertinents pour le script ; tous les autres restent intégrés dans l’article.
+- **UN VISUEL PAR SCÈNE** : la **Scène 1 utilise en priorité la Photo de Couverture 16:9** comme Hook visuel cinématique (ou la première carte météo si pas de couverture). Les scènes suivantes (2 à 5) exploitent l'ensemble des cartes météo fournies. Si moins de cartes sont disponibles, réutilise une carte dans une autre scène avec un cadrage ou un angle de commentaire cohérent. Si plus de cartes existent, conserve les plus pertinentes pour le script ; toutes les autres restent intégrées dans l’article.
 - Écrire tous les nombres en lettres dans les voix off.
 - Privilégier des phrases courtes, naturelles à l’oral.
 - Ne pas lire les noms de modèles, les runs ou les échéances techniques sauf nécessité éditoriale.
@@ -306,14 +306,14 @@ La cohérence avec les images prime sur cette progression. N’impose pas un th�
 
 ## FORMAT DE SORTIE STRICT
 
-SCÈNE 1
-- Image à utiliser : [Nom complet exact du fichier — échéance ou portion à diffuser — cadrage utile]
-- Durée animation : [Uniquement si le fichier est un GIF : « ~N s (N images) ». Sinon écrire « Image fixe ».]
-- Badge : [2 à 3 mots en majuscules]
+SCÈNE 1 (HOOK / OUVERTURE)
+- Image à utiliser : Photo de couverture (accroche visuelle 16:9 générée)
+- Durée animation : Image fixe
+- Badge : [2 à 3 mots en majuscules d'accroche ou de vigilance]
 - Titre : [Majuscules, 32 caractères maximum]
 - Sous-titre : [Court, en majuscules]
-- Localisation : [Zone en majuscules]
-- Bandeau Infos Météo : [Phrase courte, cohérente avec le visuel ; chiffres uniquement s’ils sont justifiés]
+- Localisation : [Zone en majuscules ou FRANCE]
+- Bandeau Infos Météo : [Phrase choc résumant le phénomène]
 - Voix off Charon : [Accroche immédiate, 8 à 14 mots, immédiatement compréhensible]
 
 SCÈNE 2
