@@ -39,12 +39,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Verify FFmpeg and Install Fonts
-        # ponytail: FFmpeg est déjà préinstallé nativement sur ubuntu-latest (/usr/bin/ffmpeg)
-        # Seules les polices système sont installées en quelques secondes.
+      - name: Install System Dependencies (FFmpeg & Fonts)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends fonts-dejavu-core fonts-liberation
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core fonts-liberation
           ffmpeg -version | head -n 1
 
       - name: Install Python Dependencies
