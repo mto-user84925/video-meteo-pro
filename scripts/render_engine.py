@@ -287,6 +287,33 @@ def progress(session_id, pct, text, kind="info"):
 
 progress.warned = False
 
+def tts_edge_fallback(text, out_wav):
+    """Fallback automatique broadcast haute fidélité si OpenRouter manque de crédits (402)."""
+    print("🔄 Bascule automatique sur la voix studio de secours (edge-tts Henri)...", flush=True)
+    temp_mp3 = out_wav + ".tmp.mp3"
+    try:
+        cmd = [
+            sys.executable, "-m", "edge_tts",
+            "--voice", "fr-FR-HenriNeural",
+            "--rate", "-2%",
+            "--text", text,
+            "--write-media", temp_mp3
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        subprocess.run([
+            "ffmpeg", "-y", "-i", temp_mp3,
+            "-ar", "24000", "-ac", "1", out_wav
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(temp_mp3):
+            os.remove(temp_mp3)
+        print("✅ Voix studio de secours générée avec succès.", flush=True)
+        return True
+    except Exception as exc:
+        print(f"⚠️ Échec du fallback vocal edge-tts : {exc}", flush=True)
+        if os.path.exists(temp_mp3):
+            os.remove(temp_mp3)
+        return False
+
 def tts_charon(text, out_wav):
     url = "https://openrouter.ai/api/v1/audio/speech"
     payload = {
@@ -332,10 +359,16 @@ def tts_charon(text, out_wav):
         except Exception as e:
             last_error = e
             print(f"⚠️ TTS tentative {attempt}/3 échouée : {e}", flush=True)
+            if "402" in str(e):
+                # Crédits insuffisants sur OpenRouter : inutile de réessayer 3 fois
+                break
             if attempt < 3:
                 time.sleep(3 * attempt)
 
     if pcm is None:
+        print(f"⚠️ Bascule automatique suite à indisponibilité TTS ({last_error})...", flush=True)
+        if tts_edge_fallback(text, out_wav):
+            return
         raise RuntimeError(f"Synthèse vocale impossible après 3 tentatives ({last_error})")
 
     with wave.open(out_wav, "wb") as wf:
