@@ -292,14 +292,14 @@ def tts_edge_fallback(text, out_wav):
     print("🔄 Bascule automatique sur la voix studio de secours (edge-tts Henri)...", flush=True)
     temp_mp3 = out_wav + ".tmp.mp3"
     try:
-        cmd = [
-            sys.executable, "-m", "edge_tts",
-            "--voice", "fr-FR-HenriNeural",
-            "--rate", "-2%",
-            "--text", text,
-            "--write-media", temp_mp3
-        ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        import asyncio
+        import edge_tts
+
+        async def _run_tts():
+            comm = edge_tts.Communicate(text, "fr-FR-HenriNeural", rate="-2%")
+            await comm.save(temp_mp3)
+
+        asyncio.run(_run_tts())
         subprocess.run([
             "ffmpeg", "-y", "-i", temp_mp3,
             "-ar", "24000", "-ac", "1", out_wav
