@@ -127,6 +127,13 @@ function matchImageForScene(
     return allImages[0];
   }
 
+  const normalizeWithExt = (s: string) =>
+    s.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[-_\s]*copie[-_\s]*/gi, "")
+      .replace(/[^a-z0-9.]/g, "");
+
   const normalize = (s: string) =>
     s.toLowerCase()
       .normalize("NFD")
@@ -142,7 +149,36 @@ function matchImageForScene(
     targetFileOnly = fileMatch[1].trim();
   }
 
-  // 1a. Correspondance EXACTE de nom de fichier (priorité absolue pour les intitulés conformes)
+  const isGifRequested = targetFileOnly.toLowerCase().endsWith(".gif") || (ps.fileName || "").toLowerCase().includes(".gif");
+
+  // 1a. Correspondance EXACTE AVEC EXTENSION (priorité absolue, empêche qu'un .gif soit remplacé par un .png)
+  const cleanTargetWithExt = normalizeWithExt(targetFileOnly);
+  if (cleanTargetWithExt.length >= 4) {
+    for (const img of allImages) {
+      if (usedUrls.has(img.url)) continue;
+      const cleanImgWithExt = normalizeWithExt(img.name);
+      if (cleanImgWithExt === cleanTargetWithExt) {
+        usedUrls.add(img.url);
+        return img;
+      }
+    }
+  }
+
+  // 1b. Si un GIF est demandé explicitement, chercher en priorité les images .gif disponibles
+  if (isGifRequested) {
+    const gifImages = allImages.filter(img => img.name.toLowerCase().endsWith(".gif"));
+    for (const img of gifImages) {
+      if (usedUrls.has(img.url)) continue;
+      const cleanImg = normalize(img.name);
+      const cleanTarget = normalize(targetFileOnly);
+      if (cleanImg === cleanTarget || (cleanTarget.length >= 5 && (cleanImg.includes(cleanTarget) || cleanTarget.includes(cleanImg)))) {
+        usedUrls.add(img.url);
+        return img;
+      }
+    }
+  }
+
+  // 1c. Correspondance EXACTE de nom de fichier sans extension
   const cleanTarget = normalize(targetFileOnly);
   if (cleanTarget.length >= 3) {
     for (const img of allImages) {
@@ -155,7 +191,7 @@ function matchImageForScene(
     }
   }
 
-  // 1b. Correspondance par inclusion de nom nettoyé (sans extension, sans _copie)
+  // 1d. Correspondance par inclusion de nom nettoyé (sans extension, sans _copie)
   if (cleanTarget.length >= 5) {
     for (const img of allImages) {
       if (usedUrls.has(img.url)) continue;
@@ -2056,9 +2092,12 @@ export default function StudioMeteoPage() {
 
       const batchWithRefs = uploaded.map((u, i) => ({ ...u, ref: i + 1 }));
       setBatchUploadedImages(batchWithRefs);
-      if (!coverImageUrl && uploaded[0]) {
-        setCoverImageUrl(uploaded[0].url);
-        setCoverImageName(uploaded[0].name);
+      if (!coverImageUrl && uploaded.length > 0) {
+        // Privilégier une image statique (non-GIF) pour la couverture 16:9
+        const staticCandidate = uploaded.find(u => !u.name.toLowerCase().endsWith(".gif"));
+        const chosenCover = staticCandidate || uploaded[0];
+        setCoverImageUrl(chosenCover.url);
+        setCoverImageName(chosenCover.name);
       }
 
       if (manualPromptText) {
@@ -2200,12 +2239,16 @@ export default function StudioMeteoPage() {
       }, 1000));
 
       let attempts = 0;
+      let unknownAttempts = 0;
       const statusInterval = (renderPollRef.current = setInterval(async () => {
         attempts++;
         try {
           const stRes = await fetch(`/api/status?session_id=${sId}`);
           if (stRes.ok) {
             const stData = await stRes.json();
+            if (stData.status !== "unknown") {
+              unknownAttempts = 0;
+            }
             if (stData.status === "completed") {
               clearInterval(timerInterval);
               clearInterval(statusInterval);
@@ -2235,15 +2278,20 @@ export default function StudioMeteoPage() {
                 setProgressStep("Rendu en échec");
                 notify(`Rendu en échec : ${reason}`, "error");
             } else if (stData.status === "unknown") {
-                clearInterval(timerInterval);
-                clearInterval(statusInterval);
-                setLogs(prev => [
-                  ...prev,
-                  { id: `unk_${Date.now()}`, time: getNowStr(), text: "❌ Aucun job trouvé pour cette session. Relancez le rendu.", type: "error" }
-                ]);
-                setRenderStatus('error');
-                setRendering(false);
-                notify("Aucun job trouvé pour cette session.", "error");
+                unknownAttempts++;
+                // Délai de grâce de 15s (6 cycles de 2.5s) pour laisser le temps
+                // à Supabase Storage CDN et au runner d'initialiser les fichiers de session
+                if (unknownAttempts >= 6) {
+                  clearInterval(timerInterval);
+                  clearInterval(statusInterval);
+                  setLogs(prev => [
+                    ...prev,
+                    { id: `unk_${Date.now()}`, time: getNowStr(), text: "❌ Aucun job trouvé pour cette session. Relancez le rendu.", type: "error" }
+                  ]);
+                  setRenderStatus('error');
+                  setRendering(false);
+                  notify("Aucun job trouvé pour cette session.", "error");
+                }
             } else if (stData.progress && stData.progress.ts !== lastProgressTs) {
               lastProgressTs = stData.progress.ts;
               setLogs(prev => [...prev, { id: `p_${stData.progress.ts}`, time: getNowStr(), text: stData.progress.text, type: (stData.progress.type || "info") as any }]);
@@ -2644,7 +2692,7 @@ export default function StudioMeteoPage() {
               {/* 2. IMPORTER CARTES */}
               <label className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-xl shadow-lg shadow-sky-600/20 transition-all flex items-center gap-2 text-xs md:text-sm cursor-pointer">
                 {uploadingBatch ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {uploadingBatch ? "Téléversement..." : "🖼️ Importer cartes (Image 1, 2, 3...)"}
+                {uploadingBatch ? "Téléversement..." : "🖼️ Importer cartes & GIFs animés (Image 1, 2, 3...)"}
                 <input
                   type="file"
                   multiple
@@ -3316,48 +3364,60 @@ export default function StudioMeteoPage() {
                     )}
 
                     {/* APERÇU VIGNETTE DE LA CARTE */}
-                    <div className="w-full h-36 rounded-xl overflow-hidden relative border border-slate-700 bg-slate-950 group shadow-inner">
-                      {sc.file_url ? (
-                        <>
-                          <img
-                            src={sc.file_url}
-                            alt={`Scène ${i + 1}`}
-                            onError={(e) => {
-                              const target = e.currentTarget as HTMLImageElement;
-                              if (!target.dataset.fallback && sc.file_url) {
-                                target.dataset.fallback = "true";
-                                target.src = `https://images.weserv.nl/?url=${encodeURIComponent(sc.file_url)}&output=jpg&w=800`;
-                              }
-                            }}
-                            className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
-                          />
-                          <div className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-bold text-emerald-400 border border-emerald-500/40 flex items-center gap-1 shadow">
-                            <CheckCircle2 className="w-3 h-3" /> {sc.file_url === coverImageUrl ? "🌟 Couverture 16:9" : (sc.image_ref ? `Image ${sc.image_ref}` : (i === 0 ? "Couverture" : `Carte ${i + 1}`))}
-                          </div>
-                          <label className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all text-xs text-white font-bold gap-1.5 cursor-pointer backdrop-blur-xs">
-                            <Upload className="w-4 h-4 text-sky-400" /> Remplacer
-                            <input
-                              type="file"
-                              accept="image/*,.gif"
-                              className="hidden"
-                              onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
-                            />
-                          </label>
-                        </>
-                      ) : (
-                        <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer hover:bg-slate-900/80 transition-all p-2 text-center border-2 border-dashed border-slate-800 hover:border-sky-500 rounded-xl">
-                          <input
-                            type="file"
-                            accept="image/*,.gif"
-                            className="hidden"
-                            onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
-                          />
-                          <ImageIcon className="w-5 h-5 text-slate-500 mb-1" />
-                          <span className="text-[11px] font-semibold text-slate-400">{sc.image_ref ? `Ajouter Image ${sc.image_ref}` : (i === 0 ? "Photo Couverture" : "Ajouter une carte")}</span>
-                          <span className="text-[9px] text-slate-600">PNG, JPG, GIF</span>
-                        </label>
-                      )}
-                    </div>
+                    {(() => {
+                      const isSceneGif = (sc.file_url || "").toLowerCase().split("?")[0].endsWith(".gif") || (sc.file_name || "").toLowerCase().endsWith(".gif");
+                      return (
+                        <div className="w-full h-36 rounded-xl overflow-hidden relative border border-slate-700 bg-slate-950 group shadow-inner">
+                          {sc.file_url ? (
+                            <>
+                              <img
+                                src={sc.file_url}
+                                alt={`Scène ${i + 1}`}
+                                onError={(e) => {
+                                  const target = e.currentTarget as HTMLImageElement;
+                                  if (!target.dataset.fallback && sc.file_url) {
+                                    target.dataset.fallback = "true";
+                                    target.src = isSceneGif
+                                      ? `https://images.weserv.nl/?url=${encodeURIComponent(sc.file_url)}&n=-1`
+                                      : `https://images.weserv.nl/?url=${encodeURIComponent(sc.file_url)}&output=jpg&w=800`;
+                                  }
+                                }}
+                                className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
+                              />
+                              <div className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-bold text-emerald-400 border border-emerald-500/40 flex items-center gap-1 shadow">
+                                <CheckCircle2 className="w-3 h-3" /> {sc.file_url === coverImageUrl ? "🌟 Couverture 16:9" : (sc.image_ref ? `Image ${sc.image_ref}` : (i === 0 ? "Couverture" : `Carte ${i + 1}`))}
+                              </div>
+                              {isSceneGif && (
+                                <div className="absolute top-1.5 right-1.5 bg-purple-950/90 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-black text-purple-300 border border-purple-500/50 flex items-center gap-1 shadow animate-pulse">
+                                  <span>🎞️ GIF Animé</span>
+                                </div>
+                              )}
+                              <label className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all text-xs text-white font-bold gap-1.5 cursor-pointer backdrop-blur-xs">
+                                <Upload className="w-4 h-4 text-sky-400" /> Remplacer
+                                <input
+                                  type="file"
+                                  accept="image/*,.gif"
+                                  className="hidden"
+                                  onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
+                                />
+                              </label>
+                            </>
+                          ) : (
+                            <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer hover:bg-slate-900/80 transition-all p-2 text-center border-2 border-dashed border-slate-800 hover:border-sky-500 rounded-xl">
+                              <input
+                                type="file"
+                                accept="image/*,.gif"
+                                className="hidden"
+                                onChange={e => e.target.files?.[0] && handleFileUpload(i, e.target.files[0])}
+                              />
+                              <ImageIcon className="w-5 h-5 text-slate-500 mb-1" />
+                              <span className="text-[11px] font-semibold text-slate-400">{sc.image_ref ? `Ajouter Image / GIF ${sc.image_ref}` : (i === 0 ? "Photo Couverture" : "Ajouter Carte ou GIF")}</span>
+                              <span className="text-[9px] text-slate-500 font-mono">PNG, JPG, GIF animé</span>
+                            </label>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* TITRE & SOUS-TITRE */}
                     <div className="mt-2 space-y-1.5">

@@ -60,9 +60,9 @@ function validateJob(job: JobPayload): string | null {
   if (job.scenes.length > 12) {
     return "Le job dépasse 12 scènes (maximum supporté par la régie).";
   }
-  const withoutFile = job.scenes.findIndex((s) => !s?.file);
-  if (withoutFile !== -1) {
-    return `La scène ${withoutFile + 1} n'a pas de visuel.`;
+  const invalidFile = job.scenes.findIndex((s) => !s?.file || (!s.file.startsWith("http://") && !s.file.startsWith("https://")));
+  if (invalidFile !== -1) {
+    return `La scène ${invalidFile + 1} n'a pas d'URL de visuel valide (doit être http(s)://).`;
   }
   const totalWords = job.scenes.reduce(
     (acc, s) => acc + (s.script_text || "").trim().split(/\s+/).filter(Boolean).length,

@@ -301,6 +301,7 @@ export interface ParsedVideoScene {
   ticker: string;
   script_text: string;
   fileName: string;
+  animation_duration?: string;
 }
 
 export function parseFullVideoScript(text: string): ParsedVideoScene[] {
@@ -345,6 +346,7 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
     let ticker = "";
     let script_text = "";
     let fileName = "";
+    let animation_duration = "";
     // Les lignes de la voix off : après « Voix off Charon : », la suite du
     // paragraphe appartient à la même voix off, même si elle contient des
     // deux-points (« ...pour vents violents : le Nord, le Pas-de-Calais »).
@@ -418,6 +420,8 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
             fileName = v;
           }
         }
+      } else if (k.includes("duree") || k.includes("durée") || k.includes("animation")) {
+        animation_duration = v;
       }
     }
     script_text = voiceParts.join(" ").replace(/\s+/g, " ").trim();
@@ -438,7 +442,8 @@ export function parseFullVideoScript(text: string): ParsedVideoScene[] {
       ticker: ticker || "",
       location_tag: location_tag || "FRANCE",
       fileName: fileName || "",
-      script_text: script_text || ""
+      script_text: script_text || "",
+      animation_duration: animation_duration || ""
     });
   }
 

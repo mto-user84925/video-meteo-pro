@@ -106,7 +106,16 @@ export async function GET(req: Request) {
 
     // 5. Distinguer « en cours » de « jamais lancé »
     const dispatched = await fetchJson<{ dispatched_at: number }>(`renders/${sessionId}/dispatched.json`);
-    if (!dispatched && !progress) {
+    let jobExists = !!dispatched;
+    if (!jobExists) {
+      try {
+        const headJob = await fetch(publicUrl(`renders/${sessionId}/job.json`), { method: "HEAD", ...NO_STORE });
+        jobExists = headJob.ok;
+      } catch {
+        /* best-effort */
+      }
+    }
+    if (!dispatched && !progress && !jobExists) {
       return NextResponse.json({
         status: "unknown",
         step: "Aucun job trouvé pour cette session.",

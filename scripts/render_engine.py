@@ -384,9 +384,20 @@ def media_duration(path):
             "ffprobe", "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", path
         ], stderr=subprocess.DEVNULL).decode().strip()
-        return float(out) if out and out != "N/A" else 0.0
+        val = float(out) if out and out != "N/A" else 0.0
+        if val > 0.0:
+            return val
     except Exception:
-        return 0.0
+        pass
+    # ponytail: fallback Pillow pour les GIF météo sans durée conteneur ffprobe
+    try:
+        with Image.open(path) as im:
+            if getattr(im, "is_animated", False):
+                total_ms = sum(im.info.get("duration", 100) for _ in range(im.n_frames))
+                return max(0.0, total_ms / 1000.0)
+    except Exception:
+        pass
+    return 0.0
 
 
 def rebalance_for_animations(scene_durs, gif_durs, voice_dur):
@@ -537,7 +548,14 @@ def render(job_file):
             # shutil est déjà importé au niveau module.
             shutil.copyfile(file_input, local_file)
 
-        is_gif = local_file.lower().endswith(".gif")
+        # ponytail: détection binaire GIF (magic bytes), insensible à la casse,
+        # aux query params de l'URL d'origine et aux éventuels fallbacks PNG.
+        is_gif = False
+        try:
+            with open(local_file, "rb") as _fh:
+                is_gif = _fh.read(6) in (b"GIF87a", b"GIF89a")
+        except Exception:
+            is_gif = local_file.lower().endswith(".gif")
 
         # Durée réelle de l'animation (0.0 pour une image fixe).
         # BUG corrigé : `gif_durs` est déjà dimensionné à une case par scène ;
@@ -668,9 +686,10 @@ def render(job_file):
     if any(d > 0 for d in gif_durs):
         total_gif = sum(d for d in gif_durs if d > 0)
         print(f"🎞️ Animation(s) détectée(s) : {sum(1 for d in gif_durs if d > 0)} GIF totalisant {total_gif:.1f}s")
-        new_durs, adjusted = rebalance_for_animations(scene_durs, gif_durs, voice_dur)
+        new_durs, warnings = rebalance_for_animations(scene_durs, gif_durs, voice_dur)
 
-        if adjusted:
+        is_voice_too_short = (total_gif > voice_dur + 0.5)
+        if is_voice_too_short:
             # La voix off ne couvre pas toutes les animations : on informe
             # précisément de combien de mots il manque.
             needed_words = int(round(total_gif * 2.85)) - sum(
@@ -732,7 +751,7 @@ def render(job_file):
 
         cmd = ["ffmpeg", "-y"]
         if sc["is_gif"]:
-            cmd.extend(["-ignore_loop", "0", "-i", sc["file"]])
+            cmd.extend(["-stream_loop", "-1", "-ignore_loop", "0", "-i", sc["file"]])
         else:
             cmd.extend(["-loop", "1", "-i", sc["file"]])
 
@@ -782,7 +801,7 @@ def render(job_file):
 
         cmd = ["ffmpeg", "-y"]
         if sc["is_gif"]:
-            cmd.extend(["-ignore_loop", "0", "-i", sc["file"]])
+            cmd.extend(["-stream_loop", "-1", "-ignore_loop", "0", "-i", sc["file"]])
         else:
             cmd.extend(["-loop", "1", "-i", sc["file"]])
 
